@@ -1,0 +1,19 @@
+[gd_scene load_steps=2 format=3 uid="uid://cd0m7xj4opot4"]
+
+[ext_resource type="Script" uid="uid://yixp0tx2noqd" path="res://LeftSidebarPanel.gd" id="1_gy7e4"]
+
+[node name="LeftPropertiesPanel" type="ScrollContainer"]
+custom_minimum_size = Vector2(300, 0)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 0
+size_flags_vertical = 3
+script = ExtResource("1_gy7e4")
+
+[node name="PropertiesVBox" type="VBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
