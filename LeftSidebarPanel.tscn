@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://yixp0tx2noqd" path="res://LeftSidebarPanel.gd" id="1_gy7e4"]
 
-[node name="LeftPropertiesPanel" type="ScrollContainer"]
+[node name="LeftSidebarPanel" type="ScrollContainer"]
 custom_minimum_size = Vector2(300, 0)
 anchors_preset = 15
 anchor_right = 1.0

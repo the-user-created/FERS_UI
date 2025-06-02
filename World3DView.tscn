@@ -1,0 +1,49 @@
+[gd_scene load_steps=7 format=3 uid="uid://chq76y7io2u2b"]
+
+[ext_resource type="Script" uid="uid://c2634d33m8ok0" path="res://World3DView.gd" id="1_24a2f"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_8itch"]
+
+[sub_resource type="Sky" id="Sky_1ukwx"]
+sky_material = SubResource("ProceduralSkyMaterial_8itch")
+
+[sub_resource type="Environment" id="Environment_fncrm"]
+background_mode = 2
+sky = SubResource("Sky_1ukwx")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_8itch"]
+shading_mode = 0
+albedo_color = Color(0.7, 0.7, 0.7, 1)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_1ukwx"]
+material = SubResource("StandardMaterial3D_8itch")
+size = Vector2(20, 20)
+subdivide_width = 20
+subdivide_depth = 20
+
+[node name="World3DView" type="SubViewportContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_24a2f")
+
+[node name="Simulation3DViewport" type="SubViewport" parent="."]
+handle_input_locally = false
+size = Vector2i(2, 2)
+render_target_update_mode = 4
+
+[node name="World3DRoot" type="Node3D" parent="Simulation3DViewport"]
+
+[node name="MainCamera3D" type="Camera3D" parent="Simulation3DViewport/World3DRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 10)
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="Simulation3DViewport/World3DRoot"]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 0, 0)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="Simulation3DViewport/World3DRoot"]
+environment = SubResource("Environment_fncrm")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Simulation3DViewport/World3DRoot"]
+mesh = SubResource("PlaneMesh_1ukwx")

@@ -11,7 +11,7 @@ var file_dialog: FileDialog
 
 
 func _ready() -> void:
-	name = "LeftPropertiesPanel"
+	name = "LeftSidebar"
 
 	if not is_instance_valid(VBox_content):
 		VBox_content = find_child("PropertiesVBox") as VBoxContainer
