@@ -5,6 +5,8 @@ var left_sidebar_panel: LeftSidebarPanel
 var world_3d_view: World3DView
 var right_sidebar: RightSidebarPanel
 var simulation_elements_data: Dictionary = {}
+var toggle_left_sidebar_button: Button
+var toggle_right_sidebar_button: Button
 
 
 func _ready() -> void:
@@ -34,43 +36,85 @@ func _setup_references_and_connections() -> void:
 		return
 
 	left_sidebar_panel = main_layout_node.get_node_or_null("LeftSidebar") as LeftSidebarPanel
-	world_3d_view = main_layout_node.get_node_or_null("World3DView") as World3DView
+	world_3d_view = main_layout_node.get_node_or_null("MiddleViewContainer/World3DView") as World3DView
 	right_sidebar = main_layout_node.get_node_or_null("RightSidebar") as RightSidebarPanel
 
+	toggle_left_sidebar_button = main_layout_node.get_node_or_null("ToggleLeftSidebarButton") as Button
+	toggle_right_sidebar_button = main_layout_node.get_node_or_null("ToggleRightSidebarButton") as Button
+
+	# --- Validate Core Components ---
 	if not is_instance_valid(left_sidebar_panel):
 		printerr("Main: LeftSidebarPanel node not found during deferred setup!")
-		return
+	# return # TODO: Consider if returning here is too abrupt if other parts can function
 	if not is_instance_valid(world_3d_view):
-		printerr("Main: World3DView node not found during deferred setup!")
-		return
+		printerr("Main: World3DView node not found at new path 'MainLayout/MiddleViewContainer/World3DView' during deferred setup!")
 	if not is_instance_valid(right_sidebar):
 		printerr("Main: RightSidebarPanel node not found during deferred setup!")
-		return
 
-	# Connect signals from Left Sidebar
-	left_sidebar_panel.connect("property_changed", Callable(self, "_on_left_sidebar_property_changed"))
-
-	# Connect signals from Right Sidebar
-	if right_sidebar.has_signal("element_selected"):
-		right_sidebar.connect("element_selected", Callable(self, "_on_right_sidebar_element_selected"))
+	# --- Validate New Buttons ---
+	if not is_instance_valid(toggle_left_sidebar_button):
+		printerr("Main: ToggleLeftSidebarButton node not found!")
 	else:
-		printerr("RightSidebarPanel does not have signal 'element_selected'")
+		# Set initial text and connect signal
+		toggle_left_sidebar_button.text = "<" if left_sidebar_panel.visible else ">"
+		toggle_left_sidebar_button.pressed.connect(_on_toggle_left_sidebar_button_pressed)
 
-	if right_sidebar.has_signal("add_new_element_requested"):
-		right_sidebar.connect("add_new_element_requested", Callable(self, "_on_right_sidebar_add_new_element_requested"))
+	if not is_instance_valid(toggle_right_sidebar_button):
+		printerr("Main: ToggleRightSidebarButton node not found!")
 	else:
-		printerr("RightSidebarPanel does not have signal 'add_new_element_requested'")
+		# Set initial text and connect signal
+		toggle_right_sidebar_button.text = ">" if right_sidebar.visible else "<"
+		toggle_right_sidebar_button.pressed.connect(_on_toggle_right_sidebar_button_pressed)
 
-	# Select default item in RightSidebar
-	if right_sidebar and right_sidebar.has_method("select_default_item"):
-		right_sidebar.call_deferred("select_default_item")
+	# --- Connect signals from Left Sidebar (if valid) ---
+	if is_instance_valid(left_sidebar_panel):
+		left_sidebar_panel.connect("property_changed", Callable(self, "_on_left_sidebar_property_changed"))
 	else:
+		printerr("Main: LeftSidebarPanel invalid, cannot connect 'property_changed'.")
+
+	# --- Connect signals from Right Sidebar (if valid) ---
+	if is_instance_valid(right_sidebar):
+		if right_sidebar.has_signal("element_selected"):
+			right_sidebar.connect("element_selected", Callable(self, "_on_right_sidebar_element_selected"))
+		else:
+			printerr("RightSidebarPanel does not have signal 'element_selected'")
+
+		if right_sidebar.has_signal("add_new_element_requested"):
+			right_sidebar.connect("add_new_element_requested", Callable(self, "_on_right_sidebar_add_new_element_requested"))
+		else:
+			printerr("RightSidebarPanel does not have signal 'add_new_element_requested'")
+
+		# Select default item in RightSidebar
+		if right_sidebar.has_method("select_default_item"):
+			right_sidebar.call_deferred("select_default_item")
+		else:
+			call_deferred("_initial_left_panel_display")
+	else:
+		printerr("Main: RightSidebarPanel invalid, cannot connect signals or select default item.")
 		call_deferred("_initial_left_panel_display")
 
 	print("Main (Control) scene: Deferred setup and connections complete.")
 
 
+# --- Callbacks for Sidebar Toggle Buttons ---
+func _on_toggle_left_sidebar_button_pressed() -> void:
+	if is_instance_valid(left_sidebar_panel) and is_instance_valid(toggle_left_sidebar_button):
+		left_sidebar_panel.visible = not left_sidebar_panel.visible
+		toggle_left_sidebar_button.text = "<" if left_sidebar_panel.visible else ">"
+
+
+func _on_toggle_right_sidebar_button_pressed() -> void:
+	if is_instance_valid(right_sidebar) and is_instance_valid(toggle_right_sidebar_button):
+		right_sidebar.visible = not right_sidebar.visible
+		toggle_right_sidebar_button.text = ">" if right_sidebar.visible else "<"
+
+
+# --- Existing Callbacks ---
 func _on_right_sidebar_element_selected(item_metadata: Dictionary) -> void:
+	if not is_instance_valid(left_sidebar_panel):
+		printerr("Main: LeftSidebarPanel is not valid for _on_right_sidebar_element_selected.")
+		return
+
 	if item_metadata and item_metadata.has("id"):
 		var element_id = item_metadata.id
 		if simulation_elements_data.has(element_id):
@@ -105,10 +149,10 @@ func _on_right_sidebar_add_new_element_requested(new_element_metadata: Dictionar
 		else:
 			printerr("Main: World3DView is not valid when trying to add platform visualization.")
 
-	if right_sidebar and right_sidebar.has_method("create_and_select_tree_item"):
+	if is_instance_valid(right_sidebar) and right_sidebar.has_method("create_and_select_tree_item"):
 		right_sidebar.call("create_and_select_tree_item", new_element_metadata)
 	else:
-		printerr("Main: RightSidebarPanel does not have method 'create_and_select_tree_item'")
+		printerr("Main: RightSidebarPanel does not have method 'create_and_select_tree_item' or is invalid.")
 
 
 func _on_left_sidebar_property_changed(element_id: String, property_key: String, new_value: Variant) -> void:
@@ -125,7 +169,7 @@ func _on_left_sidebar_property_changed(element_id: String, property_key: String,
 		name_property_for_type = "name_value"
 
 	if property_key == name_property_for_type:
-		if right_sidebar and right_sidebar.has_method("update_item_name"):
+		if is_instance_valid(right_sidebar) and right_sidebar.has_method("update_item_name"):
 			right_sidebar.call("update_item_name", element_id, str(new_value))
 
 	# Handle 3D visualization updates for platforms by delegating to World3DView
@@ -147,12 +191,19 @@ func _on_left_sidebar_property_changed(element_id: String, property_key: String,
 			simulation_elements_data[element_id] = data_to_display
 		# print("Main: Platform subtype changed for '", element_id, "'. Data reset for new subtype: ", new_value) # For debugging
 
-		left_sidebar_panel.display_properties(element_id, data_to_display, simulation_elements_data)
+		if is_instance_valid(left_sidebar_panel):
+			left_sidebar_panel.display_properties(element_id, data_to_display, simulation_elements_data)
+		else:
+			printerr("Main: LeftSidebarPanel is not valid for structural refresh.")
 
 
-func _initial_left_panel_display():
+func _initial_left_panel_display() -> void:
+	if not is_instance_valid(left_sidebar_panel):
+		printerr("Main: LeftSidebarPanel is not valid for _initial_left_panel_display.")
+		return
+
 	if simulation_elements_data.has("sim_name"):
 		left_sidebar_panel.display_properties("sim_name", simulation_elements_data["sim_name"], simulation_elements_data)
 	else:
 		left_sidebar_panel.clear_panel()
-		left_sidebar_panel.call_deferred("_add_label", "Select an element or add one.") 
+		left_sidebar_panel.call_deferred("_add_label", "Select an element or add one.")
