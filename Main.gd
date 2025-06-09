@@ -98,15 +98,33 @@ func _setup_references_and_connections() -> void:
 
 # --- Callbacks for Sidebar Toggle Buttons ---
 func _on_toggle_left_sidebar_button_pressed() -> void:
-	if is_instance_valid(left_sidebar_panel) and is_instance_valid(toggle_left_sidebar_button):
-		left_sidebar_panel.visible = not left_sidebar_panel.visible
-		toggle_left_sidebar_button.text = "<" if left_sidebar_panel.visible else ">"
+	if not is_instance_valid(left_sidebar_panel): return
+
+	var target_width: float = 0.0 if left_sidebar_panel.visible else 300.0
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN_OUT)
+
+	if not left_sidebar_panel.visible:
+		left_sidebar_panel.visible = true
+
+	tween.tween_property(left_sidebar_panel, "custom_minimum_size:x", target_width, 0.2)
+	tween.chain().tween_callback(func(): left_sidebar_panel.visible = (target_width > 0))
+
+	toggle_left_sidebar_button.text = "<" if target_width > 0 else ">"
 
 
 func _on_toggle_right_sidebar_button_pressed() -> void:
-	if is_instance_valid(right_sidebar) and is_instance_valid(toggle_right_sidebar_button):
-		right_sidebar.visible = not right_sidebar.visible
-		toggle_right_sidebar_button.text = ">" if right_sidebar.visible else "<"
+	if not is_instance_valid(right_sidebar): return
+
+	var target_width: float = 0.0 if right_sidebar.visible else 300.0
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN_OUT)
+
+	if not right_sidebar.visible:
+		right_sidebar.visible = true
+
+	tween.tween_property(right_sidebar, "custom_minimum_size:x", target_width, 0.2)
+	tween.chain().tween_callback(func(): right_sidebar.visible = (target_width > 0))
+
+	toggle_right_sidebar_button.text = ">" if target_width > 0 else "<"
 
 
 # --- Existing Callbacks ---

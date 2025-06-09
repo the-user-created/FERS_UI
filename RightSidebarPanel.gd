@@ -45,10 +45,27 @@ func _ready() -> void:
 	timing_sources_category_item.set_selectable(0, false)
 	antennas_category_item.set_selectable(0, false)
 
-	_add_action_button("Add Platform", "_on_add_new_element_pressed", ["platform"])
-	_add_action_button("Add Pulse", "_on_add_new_element_pressed", ["pulse"])
-	_add_action_button("Add Timing Source", "_on_add_new_element_pressed", ["timing_source"])
-	_add_action_button("Add Antenna", "_on_add_new_element_pressed", ["antenna"])
+	var add_menu_button = MenuButton.new()
+	add_menu_button.text = "Add Element"
+	var popup_menu = add_menu_button.get_popup()
+	popup_menu.add_item("Platform", 0)
+	popup_menu.add_item("Pulse", 1)
+	popup_menu.add_item("Timing Source", 2)
+	popup_menu.add_item("Antenna", 3)
+
+	popup_menu.connect("id_pressed", _on_add_menu_id_pressed)
+	add_child(add_menu_button)
+	move_child(add_menu_button, 1)
+
+
+func _on_add_menu_id_pressed(id: int):
+	var element_type_str: String
+	match id:
+		0: element_type_str = "platform"
+		1: element_type_str = "pulse"
+		2: element_type_str = "timing_source"
+		3: element_type_str = "antenna"
+	_on_add_new_element_pressed(element_type_str)
 
 
 func _add_permanent_item(parent: TreeItem, text: String, id_val: String, type_val: String) -> TreeItem:

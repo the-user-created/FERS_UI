@@ -29,8 +29,8 @@ size_flags_horizontal = 1
 [node name="ToggleLeftSidebarButton" type="Button" parent="MainLayout"]
 layout_mode = 2
 size_flags_horizontal = 4
-size_flags_vertical = 4
 text = "<"
+flat = true
 
 [node name="MiddleViewContainer" type="VBoxContainer" parent="MainLayout"]
 layout_mode = 2
@@ -67,8 +67,8 @@ size_flags_vertical = 3
 [node name="ToggleRightSidebarButton" type="Button" parent="MainLayout"]
 layout_mode = 2
 size_flags_horizontal = 4
-size_flags_vertical = 4
 text = ">"
+flat = true
 
 [node name="RightSidebar" parent="MainLayout" instance=ExtResource("4_cm0pq")]
 custom_minimum_size = Vector2(300, 0)
