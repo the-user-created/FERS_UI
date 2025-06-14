@@ -44,9 +44,17 @@ func update_platform_visualization_position(element_id: String, platform_data: D
 
 	var platform_node: Node3D = world_3d_root.get_node_or_null(element_id) as Node3D
 	if platform_node:
-		var x_fers: float = float(platform_data.get("position_x", 0.0))
-		var y_fers: float = float(platform_data.get("position_y", 0.0)) # FERS Y (depth)
-		var alt_fers: float = float(platform_data.get("altitude", 0.0)) # FERS Altitude (up)
+		var motion_path: Dictionary = platform_data.get("motion_path", {})
+		if motion_path.is_empty() or not motion_path.has("waypoints") or (motion_path.waypoints as Array).is_empty():
+			printerr("World3DView: Platform '", element_id, "' has no motion path data or waypoints.")
+			platform_node.position = Vector3.ZERO # Default to origin
+			return
+
+		# For static visualization, use the first waypoint's position.
+		var first_waypoint: Dictionary = (motion_path.waypoints as Array)[0]
+		var x_fers: float = float(first_waypoint.get("x", 0.0))
+		var y_fers: float = float(first_waypoint.get("y", 0.0)) # FERS Y (depth)
+		var alt_fers: float = float(first_waypoint.get("altitude", 0.0)) # FERS Altitude (up)
 
 		# FERS X -> Godot X
 		# FERS Y -> Godot Z

@@ -7,9 +7,21 @@ static func get_default_data(element_type: String, el_name: String, el_id: Strin
 		"platform":
 			base_data.merge({
 				"platform_type_actual": "target",
-				"position_x": 0.0,
-				"position_y": 0.0,
-				"altitude": 0.0,
+				"motion_path": {
+					"interpolation": "static", # static, linear, cubic
+					"waypoints": [{"time": 0.0, "x": 0.0, "y": 0.0, "altitude": 0.0}]
+				},
+				"rotation_model": {
+					"type": "fixed", # fixed
+					"fixed_rotation_data": {
+						"start_azimuth": 0.0, "start_elevation": 0.0,
+						"azimuth_rate": 0.0, "elevation_rate": 0.0
+					},
+					"rotation_path_data": {
+						"interpolation": "static", # static, linear, cubic
+						"waypoints": [{"time": 0.0, "azimuth": 0.0, "elevation": 0.0}]
+					}
+				}
 			}, true)
 			# Merge defaults for the initial platform subtype (target)
 			base_data.merge(get_platform_subtype_defaults("target"), true)
@@ -84,7 +96,11 @@ static func get_platform_subtype_defaults(platform_subtype: String) -> Dictionar
 # Defines which property keys, when changed, should trigger a structural refresh of the LeftSidebarPanel
 static func get_structural_refresh_trigger_keys() -> Dictionary:
 	return {
-		"platform": ["platform_type_actual", "target_rcs_type_actual", "target_rcs_fluctuation_model_type", "transmitter_type_actual"],
+		"platform": [
+		"platform_type_actual", "target_rcs_type_actual",
+		"target_rcs_fluctuation_model_type", "transmitter_type_actual",
+		"motion_path_interpolation", "rotation_model_type", "rotation_path_interpolation"
+		],
 		"pulse": ["pulse_type_actual"],
 		"antenna": ["antenna_pattern_actual"]
 	}
@@ -92,14 +108,14 @@ static func get_structural_refresh_trigger_keys() -> Dictionary:
 
 # Helper to clean/prepare platform data when its subtype changes
 static func prepare_platform_data_for_subtype_change(existing_data: Dictionary, new_subtype: String) -> Dictionary:
+	var default_platform_data := get_default_data("platform", "", "")
 
 	var new_platform_data: Dictionary = {
 		"id": existing_data.id,
 		"type": "platform",
 		"name": existing_data.name,
-		"position_x": existing_data.position_x,
-		"position_y": existing_data.position_y,
-		"altitude": existing_data.altitude,
+		"motion_path": existing_data.get("motion_path", default_platform_data.motion_path),
+		"rotation_model": existing_data.get("rotation_model", default_platform_data.rotation_model),
 		"platform_type_actual": new_subtype
 	}
 

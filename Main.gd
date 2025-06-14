@@ -179,7 +179,19 @@ func _on_left_sidebar_property_changed(element_id: String, property_key: String,
 		return
 
 	var element_data: Dictionary = simulation_elements_data[element_id]
-	element_data[property_key] = new_value
+	# Special handling for nested properties to avoid flattening the data model.
+	if property_key == "motion_path_interpolation":
+		if element_data.has("motion_path") and element_data.motion_path is Dictionary:
+			element_data.motion_path.interpolation = new_value
+	elif property_key == "rotation_model_type":
+		if element_data.has("rotation_model") and element_data.rotation_model is Dictionary:
+			element_data.rotation_model.type = new_value
+	elif property_key == "rotation_path_interpolation":
+		if element_data.has("rotation_model") and element_data.rotation_model is Dictionary:
+			if element_data.rotation_model.has("rotation_path_data") and element_data.rotation_model.rotation_path_data is Dictionary:
+				element_data.rotation_model.rotation_path_data.interpolation = new_value
+	else:
+		element_data[property_key] = new_value
 	# print("Main: Updated data for '", element_id, "'. Key: '", property_key, "', New Value: ", new_value) # For debugging
 
 	var name_property_for_type: String = "name"
@@ -192,7 +204,7 @@ func _on_left_sidebar_property_changed(element_id: String, property_key: String,
 
 	# Handle 3D visualization updates for platforms by delegating to World3DView
 	if element_data.type == "platform":
-		if property_key.begins_with("position_") or property_key == "altitude":
+		if property_key == "motion_path":
 			if is_instance_valid(world_3d_view):
 				world_3d_view.update_platform_visualization_position(element_id, element_data)
 			else:

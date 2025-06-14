@@ -8,6 +8,9 @@ var current_element_id: String = ""
 var current_element_data: Dictionary = {}
 var main_simulation_data_ref: Dictionary = {}
 var file_dialog: FileDialog
+const WaypointEditorScene: PackedScene = preload("res://WaypointEditor.tscn")
+var waypoint_editor: WaypointEditor
+var _waypoint_editor_context_key: String = ""
 
 
 func _ready() -> void:
@@ -28,6 +31,10 @@ func _ready() -> void:
 	file_dialog.connect("file_selected", Callable(self, "_on_file_dialog_file_selected"))
 	add_child(file_dialog)
 	file_dialog.hide()
+
+	waypoint_editor = WaypointEditorScene.instantiate() as WaypointEditor
+	waypoint_editor.waypoints_updated.connect(_on_waypoint_editor_updated)
+	add_child(waypoint_editor)
 
 	clear_panel()
 	_add_label("Select an element from the Scene Hierarchy to view/edit its properties.")
@@ -123,6 +130,27 @@ func _add_float_editor(label_text: String, property_key: String, current_val: fl
 	return spin_box
 
 
+func _add_float_editor_to_container(container: VBoxContainer, label_text: String, current_val: float, min_v: float = -1000000000000, max_v: float = 1000000000000, stp: float = 0.01) -> SpinBox:
+	var hbox = HBoxContainer.new()
+	var label = Label.new()
+	label.text = label_text + ":"
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_child(label)
+
+	var spin_box = SpinBox.new()
+	spin_box.min_value = min_v
+	spin_box.max_value = max_v
+	spin_box.step = stp
+	spin_box.value = current_val
+	spin_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spin_box.allow_greater = true
+	spin_box.allow_lesser = true
+	# Note: The caller is responsible for connecting the "value_changed" signal.
+	hbox.add_child(spin_box)
+	container.add_child(hbox)
+	return spin_box
+
+
 func _add_option_button(label_text: String, property_key: String, options_arr: Array, current_selection_val: Variant, el_id: String) -> OptionButton:
 	var hbox = HBoxContainer.new()
 	var label = Label.new()
@@ -211,14 +239,39 @@ func _populate_platform_properties(el_id: String, data: Dictionary) -> void:
 	]
 	_add_option_button("Platform Type", "platform_type_actual", platform_types_options, data.get("platform_type_actual", "target"), el_id)
 
-	_add_float_editor("Position X (m)", "position_x", float(data.get("position_x", 0.0)), el_id)
-	_add_float_editor("Position Y (m)", "position_y", float(data.get("position_y", 0.0)), el_id) # FERS Y-axis
-	_add_float_editor("Altitude (m)", "altitude", float(data.get("altitude", 0.0)), el_id) # FERS Altitude
+	VBox_content.add_child(HSeparator.new())
+	var motion_label := _add_label("Motion Path"); motion_label.add_theme_font_size_override("font_size", 18)
+
+	var motion_path: Dictionary = data.get("motion_path", {})
+	_add_option_button("Interpolation", "motion_path_interpolation", ["static", "linear", "cubic"], motion_path.get("interpolation", "static"), el_id)
+
+	var manage_motion_button := Button.new(); manage_motion_button.text = "Manage Motion Waypoints"
+	manage_motion_button.pressed.connect(_on_manage_waypoints_pressed.bind("motion_path", "motion"))
+	VBox_content.add_child(manage_motion_button)
+
+	VBox_content.add_child(HSeparator.new())
+	var rotation_label := _add_label("Rotation Model"); rotation_label.add_theme_font_size_override("font_size", 18)
+
+	var rotation_model: Dictionary = data.get("rotation_model", {})
+	_add_option_button("Rotation Type", "rotation_model_type", [{"name": "Fixed Rate", "value": "fixed"}, {"name": "Waypoint Path", "value": "path"}], rotation_model.get("type", "fixed"), el_id)
+
+	match rotation_model.get("type", "fixed"):
+		"fixed":
+			var fixed_data: Dictionary = rotation_model.get("fixed_rotation_data", {})
+			_add_float_editor("Start Azimuth (deg)", "", float(fixed_data.get("start_azimuth", 0.0)), el_id).connect("value_changed", Callable(self, "_on_fixed_rotation_property_changed").bind(el_id, "start_azimuth"))
+			_add_float_editor("Start Elevation (deg)", "", float(fixed_data.get("start_elevation", 0.0)), el_id).connect("value_changed", Callable(self, "_on_fixed_rotation_property_changed").bind(el_id, "start_elevation"))
+			_add_float_editor("Azimuth Rate (deg/s)", "", float(fixed_data.get("azimuth_rate", 0.0)), el_id).connect("value_changed", Callable(self, "_on_fixed_rotation_property_changed").bind(el_id, "azimuth_rate"))
+			_add_float_editor("Elevation Rate (deg/s)", "", float(fixed_data.get("elevation_rate", 0.0)), el_id).connect("value_changed", Callable(self, "_on_fixed_rotation_property_changed").bind(el_id, "elevation_rate"))
+		"path":
+			var path_data: Dictionary = rotation_model.get("rotation_path_data", {})
+			_add_option_button("Interpolation", "rotation_path_interpolation", ["static", "linear", "cubic"], path_data.get("interpolation", "static"), el_id)
+			var manage_rot_button := Button.new(); manage_rot_button.text = "Manage Rotation Waypoints"
+			manage_rot_button.pressed.connect(_on_manage_waypoints_pressed.bind("rotation_model", "rotation"))
+			VBox_content.add_child(manage_rot_button)
 
 	VBox_content.add_child(HSeparator.new())
 	var type_specific_label: Label = _add_label("Type-Specific Properties:")
-	type_specific_label.add_theme_font_size_override("font_size", 18) # Make it a bit prominent
-
+	type_specific_label.add_theme_font_size_override("font_size", 18)
 	var actual_platform_type = data.get("platform_type_actual", "target")
 	match actual_platform_type:
 		"monostatic": _populate_monostatic_subtype_props(el_id, data)
@@ -358,3 +411,41 @@ func _on_file_dialog_file_selected(path: String) -> void:
 	path
 	)
 	_file_picker_context.clear()
+
+
+func _on_fixed_rotation_property_changed(new_value: float, el_id: String, prop_key: String) -> void:
+	if el_id != current_element_id: return
+
+	var rotation_model: Dictionary = current_element_data.get("rotation_model")
+	if rotation_model is Dictionary:
+		var fixed_data: Dictionary = rotation_model.get("fixed_rotation_data")
+		if fixed_data is Dictionary:
+			fixed_data[prop_key] = new_value
+			emit_signal("property_changed", el_id, "rotation_model", rotation_model)
+
+
+func _on_manage_waypoints_pressed(property_key: String, type: String) -> void:
+	_waypoint_editor_context_key = property_key
+	var waypoints: Array = []
+	if property_key == "motion_path":
+		waypoints = current_element_data.get(property_key, {}).get("waypoints", [])
+	elif property_key == "rotation_model":
+		waypoints = current_element_data.get(property_key, {}).get("rotation_path_data", {}).get("waypoints", [])
+
+	waypoint_editor.open_with_data(waypoints, type)
+
+
+func _on_waypoint_editor_updated(new_waypoints_array: Array) -> void:
+	if _waypoint_editor_context_key.is_empty(): return
+
+	var data_to_update: Dictionary
+	if _waypoint_editor_context_key == "motion_path":
+		data_to_update = current_element_data.get(_waypoint_editor_context_key, {})
+		data_to_update["waypoints"] = new_waypoints_array
+	elif _waypoint_editor_context_key == "rotation_model":
+		data_to_update = current_element_data.get(_waypoint_editor_context_key, {})
+		data_to_update.get("rotation_path_data", {})["waypoints"] = new_waypoints_array
+	else:
+		return
+
+	emit_signal("property_changed", current_element_id, _waypoint_editor_context_key, data_to_update)

@@ -1,0 +1,30 @@
+[gd_scene load_steps=2 format=3 uid="uid://c5al8bvh37vf3"]
+
+[ext_resource type="Script" uid="uid://br6shgdu0yg46" path="res://WaypointEditor.gd" id="1_7gfkj"]
+
+[node name="WaypointEditor" type="AcceptDialog"]
+title = "Waypoint Editor"
+initial_position = 1
+size = Vector2i(450, 500)
+script = ExtResource("1_7gfkj")
+
+[node name="MainVBox" type="VBoxContainer" parent="."]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 442.0
+offset_bottom = 458.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="ScrollContainer" type="ScrollContainer" parent="MainVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="WaypointsVBox" type="VBoxContainer" parent="MainVBox/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AddWaypointButton" type="Button" parent="MainVBox"]
+layout_mode = 2
+text = "Add Waypoint"
