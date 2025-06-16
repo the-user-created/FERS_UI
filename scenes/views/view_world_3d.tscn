@@ -1,6 +1,6 @@
 [gd_scene load_steps=5 format=3 uid="uid://chq76y7io2u2b"]
 
-[ext_resource type="Script" uid="uid://c2634d33m8ok0" path="res://World3DView.gd" id="1_24a2f"]
+[ext_resource type="Script" uid="uid://c2634d33m8ok0" path="res://scripts/views/world_3d_view.gd" id="1_24a2f"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_8itch"]
 
@@ -11,7 +11,7 @@ sky_material = SubResource("ProceduralSkyMaterial_8itch")
 background_mode = 2
 sky = SubResource("Sky_1ukwx")
 
-[node name="World3DView" type="SubViewportContainer"]
+[node name="world_3d_view" type="SubViewportContainer"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -19,18 +19,20 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_24a2f")
 
-[node name="Simulation3DViewport" type="SubViewport" parent="."]
+[node name="simulation_3d_viewport" type="SubViewport" parent="."]
+unique_name_in_owner = true
 handle_input_locally = false
 size = Vector2i(2, 2)
 render_target_update_mode = 4
 
-[node name="World3DRoot" type="Node3D" parent="Simulation3DViewport"]
+[node name="world_3d_root" type="Node3D" parent="simulation_3d_viewport"]
+unique_name_in_owner = true
 
-[node name="MainCamera3D" type="Camera3D" parent="Simulation3DViewport/World3DRoot"]
+[node name="main_camera_3d" type="Camera3D" parent="simulation_3d_viewport/world_3d_root"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 10)
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="Simulation3DViewport/World3DRoot"]
+[node name="directional_light_3d" type="DirectionalLight3D" parent="simulation_3d_viewport/world_3d_root"]
 transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 0, 0)
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="Simulation3DViewport/World3DRoot"]
+[node name="world_environment" type="WorldEnvironment" parent="simulation_3d_viewport/world_3d_root"]
 environment = SubResource("Environment_fncrm")

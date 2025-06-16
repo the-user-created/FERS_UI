@@ -3,7 +3,7 @@ extends VBoxContainer
 
 signal element_selected(item_metadata: Dictionary)
 signal add_new_element_requested(element_metadata: Dictionary)
-@onready var scenario_tree: Tree = $ScenarioTreeContainer/ScenarioTree
+@onready var scenario_tree: Tree = %scenario_tree
 
 # Category items for direct access
 var platforms_category_item: TreeItem
@@ -18,8 +18,6 @@ var antenna_id_counter: int = 0
 
 
 func _ready() -> void:
-	name = "RightSidebar"
-
 	if not is_instance_valid(scenario_tree):
 		printerr("RightSidebarPanel: ScenarioTree node not found! Ensure it exists at path ScenarioTreeContainer/ScenarioTree in RightSidebarPanel.tscn")
 		return

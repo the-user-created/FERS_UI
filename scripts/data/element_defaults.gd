@@ -1,9 +1,9 @@
 class_name ElementDefaults
 
 # Default data for newly created elements
-static func get_default_data(element_type: String, el_name: String, el_id: String) -> Dictionary:
-	var base_data: Dictionary = {"id": el_id, "type": element_type, "name": el_name}
-	match element_type:
+static func getDefaultData(elementType: String, elName: String, elId: String) -> Dictionary:
+	var base_data: Dictionary = {"id": elId, "type": elementType, "name": elName}
+	match elementType:
 		"platform":
 			base_data.merge({
 				"platform_type_actual": "target",
@@ -24,7 +24,7 @@ static func get_default_data(element_type: String, el_name: String, el_id: Strin
 				}
 			}, true)
 			# Merge defaults for the initial platform subtype (target)
-			base_data.merge(get_platform_subtype_defaults("target"), true)
+			base_data.merge(getPlatformSubtypeDefaults("target"), true)
 		"pulse":
 			base_data.merge({
 				"pulse_type_actual": "file",
@@ -42,13 +42,13 @@ static func get_default_data(element_type: String, el_name: String, el_id: Strin
 				"filename": ""
 			}, true)
 		_:
-			printerr("ElementDefaults: Unknown element type for default data: ", element_type)
+			printerr("ElementDefaults: Unknown element type for default data: ", elementType)
 	return base_data
 
 
 # Default properties for specific platform subtypes
-static func get_platform_subtype_defaults(platform_subtype: String) -> Dictionary:
-	match platform_subtype:
+static func getPlatformSubtypeDefaults(platformSubtype: String) -> Dictionary:
+	match platformSubtype:
 		"monostatic":
 			return {
 				"monostatic_radar_type": "continuous",
@@ -94,7 +94,7 @@ static func get_platform_subtype_defaults(platform_subtype: String) -> Dictionar
 
 
 # Defines which property keys, when changed, should trigger a structural refresh of the LeftSidebarPanel
-static func get_structural_refresh_trigger_keys() -> Dictionary:
+static func getStructuralRefreshTriggerKeys() -> Dictionary:
 	return {
 		"platform": [
 		"platform_type_actual", "target_rcs_type_actual",
@@ -107,17 +107,17 @@ static func get_structural_refresh_trigger_keys() -> Dictionary:
 
 
 # Helper to clean/prepare platform data when its subtype changes
-static func prepare_platform_data_for_subtype_change(existing_data: Dictionary, new_subtype: String) -> Dictionary:
-	var default_platform_data := get_default_data("platform", "", "")
+static func preparePlatformDataForSubtypeChange(existingData: Dictionary, newSubtype: String) -> Dictionary:
+	var default_platform_data := getDefaultData("platform", "", "")
 
 	var new_platform_data: Dictionary = {
-		"id": existing_data.id,
+		"id": existingData.id,
 		"type": "platform",
-		"name": existing_data.name,
-		"motion_path": existing_data.get("motion_path", default_platform_data.motion_path),
-		"rotation_model": existing_data.get("rotation_model", default_platform_data.rotation_model),
-		"platform_type_actual": new_subtype
+		"name": existingData.name,
+		"motion_path": existingData.get("motion_path", default_platform_data.motion_path),
+		"rotation_model": existingData.get("rotation_model", default_platform_data.rotation_model),
+		"platform_type_actual": newSubtype
 	}
 
-	new_platform_data.merge(get_platform_subtype_defaults(new_subtype), true)
+	new_platform_data.merge(getPlatformSubtypeDefaults(newSubtype), true)
 	return new_platform_data

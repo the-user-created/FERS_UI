@@ -1,0 +1,80 @@
+[gd_scene load_steps=5 format=3 uid="uid://dr4mwldbgpeqr"]
+
+[ext_resource type="Script" uid="uid://b1b4cuwellmj3" path="res://scripts/main.gd" id="1_glv2v"]
+[ext_resource type="PackedScene" uid="uid://cd0m7xj4opot4" path="res://ui/components/ui_left_sidebar.tscn" id="2_uu6xs"]
+[ext_resource type="PackedScene" uid="uid://chq76y7io2u2b" path="res://scenes/views/view_world_3d.tscn" id="3_r0du0"]
+[ext_resource type="PackedScene" uid="uid://cw83n334h8rpf" path="res://ui/components/ui_right_sidebar.tscn" id="4_cm0pq"]
+
+[node name="main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_glv2v")
+
+[node name="main_layout" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="left_sidebar" parent="main_layout" instance=ExtResource("2_uu6xs")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 1
+
+[node name="toggle_left_sidebar_button" type="Button" parent="main_layout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "<"
+flat = true
+
+[node name="middle_view_container" type="VBoxContainer" parent="main_layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="playback_controls" type="HBoxContainer" parent="main_layout/middle_view_container"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+alignment = 1
+
+[node name="rewind_button" type="Button" parent="main_layout/middle_view_container/playback_controls"]
+layout_mode = 2
+text = "Rewind"
+
+[node name="play_button" type="Button" parent="main_layout/middle_view_container/playback_controls"]
+layout_mode = 2
+text = "Play"
+
+[node name="pause_button" type="Button" parent="main_layout/middle_view_container/playback_controls"]
+layout_mode = 2
+text = "Pause"
+
+[node name="step_button" type="Button" parent="main_layout/middle_view_container/playback_controls"]
+layout_mode = 2
+text = "Step"
+
+[node name="world_3d_view" parent="main_layout/middle_view_container" instance=ExtResource("3_r0du0")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="toggle_right_sidebar_button" type="Button" parent="main_layout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = ">"
+flat = true
+
+[node name="right_sidebar" parent="main_layout" instance=ExtResource("4_cm0pq")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2

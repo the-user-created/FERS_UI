@@ -1,11 +1,9 @@
 class_name WaypointEditor
 extends AcceptDialog
 
-# Emitted when the user clicks "OK", sending the modified data back.
 signal waypoints_updated(new_waypoints_array: Array)
-# Use explicit paths with '$' for robustness instead of unique names with '%'.
-@onready var waypoints_vbox: VBoxContainer = $MainVBox/ScrollContainer/WaypointsVBox
-@onready var add_waypoint_button: Button = $MainVBox/AddWaypointButton
+@onready var waypoints_vbox: VBoxContainer = %waypoints_vbox
+@onready var add_waypoint_button: Button = %add_waypoint_button
 
 # A local copy of the data to work with.
 var _current_waypoints: Array = []
@@ -38,7 +36,7 @@ func _rebuild_ui() -> void:
 		vbox.size_flags_horizontal = HBoxContainer.SIZE_EXPAND_FILL
 
 		_create_spinbox(vbox, "Time (s)", waypoint.get("time", 0.0), i, "time")
-	
+
 		# Dynamically create fields based on waypoint type
 		if _waypoint_type == "motion":
 			_create_spinbox(vbox, "X (m)", waypoint.get("x", 0.0), i, "x")

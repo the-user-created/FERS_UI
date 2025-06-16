@@ -1,11 +1,8 @@
 class_name World3DView
 extends SubViewportContainer
 
-@onready var sub_viewport: SubViewport = $Simulation3DViewport
-@onready var world_3d_root: Node3D = $Simulation3DViewport/World3DRoot
+@onready var world_3d_root: Node3D = %world_3d_root
 
-
-# @onready var camera_3d: Camera3D = $Simulation3DViewport/World3DRoot/MainCamera3D
 
 func _ready() -> void:
 	stretch = true

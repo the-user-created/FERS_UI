@@ -1,0 +1,27 @@
+[gd_scene load_steps=2 format=3 uid="uid://cw83n334h8rpf"]
+
+[ext_resource type="Script" uid="uid://c8ltutpk0ungw" path="res://scripts/ui/right_sidebar_panel.gd" id="1_te11n"]
+
+[node name="right_sidebar_panel" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_te11n")
+
+[node name="scene_hierarchy_label" type="Label" parent="."]
+layout_mode = 2
+text = "SCENE HIERARCHY"
+horizontal_alignment = 1
+
+[node name="h_separator" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="scenario_tree_container" type="MarginContainer" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="scenario_tree" type="Tree" parent="scenario_tree_container"]
+unique_name_in_owner = true
+layout_mode = 2

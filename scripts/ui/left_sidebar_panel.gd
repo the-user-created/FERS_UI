@@ -2,26 +2,24 @@ class_name LeftSidebarPanel
 extends ScrollContainer
 
 signal property_changed(element_id: String, property_key: String, new_value: Variant)
-@onready var VBox_content: VBoxContainer = $PropertiesVBox
-
+@onready var vbox_content: VBoxContainer = %properties_vbox
+const WaypointEditorScene: PackedScene = preload("res://ui/components/ui_waypoint_editor.tscn")
 var current_element_id: String = ""
 var current_element_data: Dictionary = {}
 var main_simulation_data_ref: Dictionary = {}
+var _file_picker_context: Dictionary = {}
 var file_dialog: FileDialog
-const WaypointEditorScene: PackedScene = preload("res://WaypointEditor.tscn")
 var waypoint_editor: WaypointEditor
 var _waypoint_editor_context_key: String = ""
 
 
 func _ready() -> void:
-	name = "LeftSidebar"
-
-	if not is_instance_valid(VBox_content):
-		VBox_content = find_child("PropertiesVBox") as VBoxContainer
-		if not is_instance_valid(VBox_content):
+	if not is_instance_valid(vbox_content):
+		vbox_content = find_child("PropertiesVBox") as VBoxContainer
+		if not is_instance_valid(vbox_content):
 			printerr("LeftSidebarPanel: PropertiesVBox not found!")
-			VBox_content = VBoxContainer.new()
-			add_child(VBox_content)
+			vbox_content = VBoxContainer.new()
+			add_child(vbox_content)
 
 	file_dialog = FileDialog.new()
 	file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
@@ -41,7 +39,7 @@ func _ready() -> void:
 
 
 func clear_panel() -> void:
-	for child in VBox_content.get_children():
+	for child in vbox_content.get_children():
 		child.queue_free()
 	current_element_id = ""
 	current_element_data = {}
@@ -62,7 +60,7 @@ func display_properties(element_id: String, element_data: Dictionary, all_sim_da
 
 	if element_type != "global_simulation_name" and element_type != "global_simulation_parameters":
 		_add_string_editor("Name", "name", current_element_data.get("name", "Unnamed Element"), element_id)
-		VBox_content.add_child(HSeparator.new())
+		vbox_content.add_child(HSeparator.new())
 
 	match element_type:
 		"global_simulation_name":
@@ -89,7 +87,7 @@ func display_properties(element_id: String, element_data: Dictionary, all_sim_da
 func _add_label(text: String) -> Label:
 	var label = Label.new()
 	label.text = text
-	VBox_content.add_child(label)
+	vbox_content.add_child(label)
 	return label
 
 
@@ -105,7 +103,7 @@ func _add_string_editor(label_text: String, property_key: String, current_val: S
 	line_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	line_edit.connect("text_changed", Callable(self, "_on_text_property_changed").bind(el_id, property_key, line_edit))
 	hbox.add_child(line_edit)
-	VBox_content.add_child(hbox)
+	vbox_content.add_child(hbox)
 	return line_edit
 
 
@@ -126,7 +124,7 @@ func _add_float_editor(label_text: String, property_key: String, current_val: fl
 	spin_box.allow_lesser = true
 	spin_box.connect("value_changed", Callable(self, "_on_numerical_property_changed").bind(el_id, property_key, spin_box))
 	hbox.add_child(spin_box)
-	VBox_content.add_child(hbox)
+	vbox_content.add_child(hbox)
 	return spin_box
 
 
@@ -187,7 +185,7 @@ func _add_option_button(label_text: String, property_key: String, options_arr: A
 
 	option_button.connect("item_selected", Callable(self, "_on_option_button_item_selected").bind(el_id, property_key, option_button))
 	hbox.add_child(option_button)
-	VBox_content.add_child(hbox)
+	vbox_content.add_child(hbox)
 	return option_button
 
 
@@ -196,10 +194,8 @@ func _add_checkbox(label_text: String, property_key: String, is_chk: bool, el_id
 	check_box.text = label_text
 	check_box.button_pressed = is_chk
 	check_box.connect("toggled", Callable(self, "_on_checkbox_toggled").bind(el_id, property_key, check_box))
-	VBox_content.add_child(check_box)
+	vbox_content.add_child(check_box)
 	return check_box
-
-var _file_picker_context: Dictionary = {}
 
 
 func _add_file_picker(label_text: String, property_key: String, current_pth: String, el_id: String, dialog_title_str: String = "Select File") -> HBoxContainer:
@@ -227,7 +223,7 @@ func _add_file_picker(label_text: String, property_key: String, current_pth: Str
 	}
 	button.connect("pressed", Callable(self, "_on_browse_file_button_pressed").bind(context))
 	hbox.add_child(button)
-	VBox_content.add_child(hbox)
+	vbox_content.add_child(hbox)
 	return hbox
 
 
@@ -239,7 +235,7 @@ func _populate_platform_properties(el_id: String, data: Dictionary) -> void:
 	]
 	_add_option_button("Platform Type", "platform_type_actual", platform_types_options, data.get("platform_type_actual", "target"), el_id)
 
-	VBox_content.add_child(HSeparator.new())
+	vbox_content.add_child(HSeparator.new())
 	var motion_label := _add_label("Motion Path"); motion_label.add_theme_font_size_override("font_size", 18)
 
 	var motion_path: Dictionary = data.get("motion_path", {})
@@ -247,9 +243,9 @@ func _populate_platform_properties(el_id: String, data: Dictionary) -> void:
 
 	var manage_motion_button := Button.new(); manage_motion_button.text = "Manage Motion Waypoints"
 	manage_motion_button.pressed.connect(_on_manage_waypoints_pressed.bind("motion_path", "motion"))
-	VBox_content.add_child(manage_motion_button)
+	vbox_content.add_child(manage_motion_button)
 
-	VBox_content.add_child(HSeparator.new())
+	vbox_content.add_child(HSeparator.new())
 	var rotation_label := _add_label("Rotation Model"); rotation_label.add_theme_font_size_override("font_size", 18)
 
 	var rotation_model: Dictionary = data.get("rotation_model", {})
@@ -267,9 +263,9 @@ func _populate_platform_properties(el_id: String, data: Dictionary) -> void:
 			_add_option_button("Interpolation", "rotation_path_interpolation", ["static", "linear", "cubic"], path_data.get("interpolation", "static"), el_id)
 			var manage_rot_button := Button.new(); manage_rot_button.text = "Manage Rotation Waypoints"
 			manage_rot_button.pressed.connect(_on_manage_waypoints_pressed.bind("rotation_model", "rotation"))
-			VBox_content.add_child(manage_rot_button)
+			vbox_content.add_child(manage_rot_button)
 
-	VBox_content.add_child(HSeparator.new())
+	vbox_content.add_child(HSeparator.new())
 	var type_specific_label: Label = _add_label("Type-Specific Properties:")
 	type_specific_label.add_theme_font_size_override("font_size", 18)
 	var actual_platform_type = data.get("platform_type_actual", "target")
