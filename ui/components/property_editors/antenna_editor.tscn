@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3 uid="uid://cqoollp20utwo"]
+
+[ext_resource type="Script" uid="uid://vypesvn4cocw" path="res://scripts/ui/property_editors/antenna_editor.gd" id="1_60naj"]
+
+[node name="antenna_editor" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_60naj")

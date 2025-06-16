@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3 uid="uid://be5ybwnesvwqf"]
+
+[ext_resource type="Script" uid="uid://12eay2hrwjbi" path="res://scripts/ui/property_editors/platform_editor.gd" id="1_3qv3n"]
+
+[node name="platform_editor" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_3qv3n")

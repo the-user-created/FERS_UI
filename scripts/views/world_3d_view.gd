@@ -10,7 +10,7 @@ func _ready() -> void:
 	# Connect to the global data store to react to data changes.
 	SimData.element_added.connect(_on_simulation_data_element_added)
 	SimData.element_updated.connect(_on_simulation_data_element_updated)
-	SimData.element_removed.connect(remove_platform_visualization) # Direct connection
+	SimData.element_removed.connect(remove_platform_visualization)
 
 	# Populate view with any pre-existing data (e.g. from a loaded file)
 	var existing_platforms := SimData.get_elements_by_type("platform")
@@ -37,9 +37,9 @@ func add_platform_visualization(platform_data: Dictionary) -> void:
 		update_platform_visualization_position(element_id, platform_data)
 		return
 
-	var platform_3d_vis = CSGBox3D.new()
+	var platform_3d_vis = CSGSphere3D.new()
 	platform_3d_vis.name = element_id
-	platform_3d_vis.size = Vector3(0.5, 0.5, 0.5)
+	platform_3d_vis.radius = 0.5
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color.STEEL_BLUE
 	platform_3d_vis.material = mat

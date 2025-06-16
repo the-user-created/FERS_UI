@@ -8,11 +8,6 @@ var platforms_category_item: TreeItem
 var pulses_category_item: TreeItem
 var timing_sources_category_item: TreeItem
 var antennas_category_item: TreeItem
-# Counters for unique ID generation
-var platform_id_counter: int = 0
-var pulse_id_counter: int = 0
-var timing_id_counter: int = 0
-var antenna_id_counter: int = 0
 
 
 func _ready() -> void:
@@ -79,43 +74,17 @@ func _on_scenario_tree_item_selected() -> void:
 
 func _on_add_menu_id_pressed(id: int) -> void:
 	var element_type_str: String
-	var item_name_prefix: String
-	var item_id: String
-	var current_counter_value: int
-
 	match id:
-		0:
-			platform_id_counter += 1
-			current_counter_value = platform_id_counter
-			element_type_str = "platform"
-			item_id = "platform_%d" % current_counter_value
-			item_name_prefix = "Platform"
-		1:
-			pulse_id_counter += 1
-			current_counter_value = pulse_id_counter
-			element_type_str = "pulse"
-			item_id = "pulse_%d" % current_counter_value
-			item_name_prefix = "Pulse"
-		2: # Timing Source
-			timing_id_counter += 1
-			current_counter_value = timing_id_counter
-			element_type_str = "timing_source"
-			item_id = "timing_%d" % current_counter_value
-			item_name_prefix = "TimingSource"
-		3: # Antenna
-			antenna_id_counter += 1
-			current_counter_value = antenna_id_counter
-			element_type_str = "antenna"
-			item_id = "antenna_%d" % current_counter_value
-			item_name_prefix = "Antenna"
+		0: element_type_str = "platform"
+		1: element_type_str = "pulse"
+		2: element_type_str = "timing_source"
+		3: element_type_str = "antenna"
 		_:
 			printerr("RightSidebarPanel: Unknown element type to add.")
 			return
 
-	var item_name: String = "%s_%d" % [item_name_prefix, current_counter_value]
-
-	# Instead of emitting a signal, we call the central data store directly.
-	SimData.add_new_element(element_type_str, item_name, item_id)
+	# Tell the central data store to create a new element of this type.
+	SimData.create_new_element(element_type_str)
 
 
 # --- SimulationData Signal Handlers (This is the reactive part) ---
@@ -145,10 +114,11 @@ func _on_simulation_data_element_updated(element_id: String, element_data: Dicti
 	var item_to_update := _find_item_by_id(element_id, scenario_tree.get_root())
 	if is_instance_valid(item_to_update):
 		var name_prop = element_data.get("name", element_data.get("name_value"))
-		item_to_update.set_text(0, str(name_prop))
-		var meta: Dictionary = item_to_update.get_metadata(0)
-		meta["name"] = str(name_prop)
-		item_to_update.set_metadata(0, meta)
+		if name_prop != null:
+			item_to_update.set_text(0, str(name_prop))
+			var meta: Dictionary = item_to_update.get_metadata(0)
+			meta["name"] = str(name_prop)
+			item_to_update.set_metadata(0, meta)
 
 
 func _on_simulation_data_element_removed(element_id: String) -> void:

@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3 uid="uid://ca4bumsjvl2p"]
+
+[ext_resource type="Script" uid="uid://d1ffqaj8l0cgy" path="res://scripts/ui/property_editors/timing_source_editor.gd" id="1_xlfaj"]
+
+[node name="timing_source_editor" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_xlfaj")

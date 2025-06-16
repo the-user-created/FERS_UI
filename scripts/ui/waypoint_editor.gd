@@ -67,16 +67,22 @@ func _create_spinbox(container: VBoxContainer, label_text: String, value: float,
 	label.size_flags_horizontal = Label.SIZE_EXPAND_FILL
 	hbox.add_child(label)
 
-	var spinbox := SpinBox.new()
-	spinbox.min_value = -1000000000000
-	spinbox.max_value = 1000000000000
-	spinbox.step = 0.01
-	spinbox.value = value
-	spinbox.allow_lesser = true
-	spinbox.allow_greater = true
-	spinbox.size_flags_horizontal = SpinBox.SIZE_EXPAND_FILL
-	spinbox.value_changed.connect(_on_waypoint_value_changed.bind(index, key))
-	hbox.add_child(spinbox)
+	var num_edit := NumericLineEdit.new()
+	num_edit.allow_float = true
+	num_edit.allow_negative = true
+	num_edit.text = str(value)
+	num_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var on_value_commit = func():
+		# Don't update the data if the input is incomplete (e.g., empty or just "-").
+		if num_edit.text.is_empty() or num_edit.text == "-":
+			return
+		_on_waypoint_value_changed(num_edit.text.to_float(), index, key)
+
+	num_edit.text_submitted.connect(on_value_commit)
+	num_edit.focus_exited.connect(on_value_commit)
+
+	hbox.add_child(num_edit)
 	container.add_child(hbox)
 
 

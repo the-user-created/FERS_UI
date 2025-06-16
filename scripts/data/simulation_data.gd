@@ -16,6 +16,13 @@ var _simulation_elements_data: Dictionary = {}
 # The ID of the currently selected element.
 var _selected_element_id: String = ""
 
+var _id_counters: Dictionary = {
+	"platform": 0,
+	"pulse": 0,
+	"timing_source": 0,
+	"antenna": 0,
+}
+
 
 func _ready() -> void:
 	# Load initial default data when the simulation starts.
@@ -35,18 +42,29 @@ func _ready() -> void:
 
 
 # --- Public API for Data Manipulation ---
-func add_new_element(element_type: String, element_name: String, element_id: String) -> void:
-	var new_data_entry: Dictionary = ElementDefaults.getDefaultData(element_type, element_name, element_id)
+func create_new_element(element_type: String) -> void:
+	if not _id_counters.has(element_type):
+		printerr("SimulationData: Cannot create element of unknown type '%s'" % element_type)
+		return
 
+	# Generate a unique ID and name
+	_id_counters[element_type] += 1
+	var new_id_num = _id_counters[element_type]
+	var new_element_id: String = "%s_%d" % [element_type, new_id_num]
+	var new_element_name: String = "%s_%d" % [element_type.capitalize(), new_id_num]
+
+	# Get default data (this was already well-designed)
+	var new_data_entry: Dictionary = ElementDefaults.getDefaultData(element_type, new_element_name, new_element_id)
 	if new_data_entry.is_empty():
 		printerr("SimulationData: Failed to get default data for element type: ", element_type)
 		return
 
-	_simulation_elements_data[element_id] = new_data_entry
+	# Add to data store and emit signal
+	_simulation_elements_data[new_element_id] = new_data_entry
 	emit_signal("element_added", new_data_entry)
 
 	# Automatically select the new element
-	set_selected_element_id(element_id)
+	set_selected_element_id(new_element_id)
 
 
 func update_element_property(element_id: String, property_key: String, new_value: Variant) -> void:
