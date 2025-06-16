@@ -67,6 +67,24 @@ func create_new_element(element_type: String) -> void:
 	set_selected_element_id(new_element_id)
 
 
+func remove_element(element_id: String) -> void:
+	if not _simulation_elements_data.has(element_id):
+		printerr("SimulationData: Cannot remove non-existent element: ", element_id)
+		return
+
+	var element_data: Dictionary = _simulation_elements_data[element_id]
+	var deletable_types := ["platform", "pulse", "timing_source", "antenna"]
+	if not element_data.get("type") in deletable_types:
+		return
+
+	_simulation_elements_data.erase(element_id)
+
+	if _selected_element_id == element_id:
+		set_selected_element_id("sim_name")
+
+	emit_signal("element_removed", element_id)
+
+
 func update_element_property(element_id: String, property_key: String, new_value: Variant) -> void:
 	if not _simulation_elements_data.has(element_id):
 		printerr("SimulationData: Cannot update property for non-existent element: ", element_id)

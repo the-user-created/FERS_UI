@@ -29,6 +29,7 @@ func display_properties(element_id: String, element_data: Dictionary) -> void:
 
 	# Call the virtual method that child classes MUST implement.
 	_rebuild_ui()
+	_add_delete_button_if_applicable()
 
 
 # --- Virtual Methods for Children to Implement ---
@@ -71,6 +72,10 @@ func _on_file_dialog_file_selected(path: String) -> void:
 	_file_picker_context.clear()
 
 
+func _on_delete_button_pressed() -> void:
+	SimData.remove_element(current_element_id)
+
+
 # --- Data Communication ---
 ## Central function to notify the data store of a change.
 func _emit_property_change(property_key: String, new_value: Variant) -> void:
@@ -101,6 +106,18 @@ func _on_nested_property_changed(new_value: Variant, top_level_key: String, path
 
 
 # --- UI Creation Helper Methods (for children to use) ---
+func _add_delete_button_if_applicable() -> void:
+	var element_type = current_element_data.get("type", "")
+	var deletable_types := ["platform", "pulse", "timing_source", "antenna"]
+
+	if element_type in deletable_types:
+		add_child(HSeparator.new())
+		var delete_button := Button.new()
+		delete_button.text = "Delete Element"
+		delete_button.pressed.connect(_on_delete_button_pressed)
+		add_child(delete_button)
+
+
 func _add_string_editor(label_text: String, property_key: String, current_val: String) -> void:
 	var hbox := HBoxContainer.new()
 	var label := Label.new(); label.text = label_text + ":"; label.size_flags_horizontal = Control.SIZE_EXPAND_FILL

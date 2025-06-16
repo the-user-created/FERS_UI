@@ -7,7 +7,7 @@ var _waypoint_editor_context_key: String = ""
 
 
 func _ready() -> void:
-	super() # Call the parent's _ready method
+	super()
 	# Instantiate and manage the WaypointEditor dialog specific to platforms.
 	waypoint_editor = WaypointEditorScene.instantiate() as WaypointEditor
 	waypoint_editor.waypoints_updated.connect(_on_waypoint_editor_updated)
@@ -25,6 +25,7 @@ func display_properties(element_id: String, element_data: Dictionary) -> void:
 
 	# Call the virtual method that child classes MUST implement.
 	_rebuild_ui()
+	_add_delete_button_if_applicable()
 
 
 func _rebuild_ui() -> void:
