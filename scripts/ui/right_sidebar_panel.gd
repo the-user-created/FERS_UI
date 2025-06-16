@@ -1,8 +1,6 @@
 class_name RightSidebarPanel
 extends VBoxContainer
 
-signal element_selected(item_metadata: Dictionary)
-signal add_new_element_requested(element_metadata: Dictionary)
 @onready var scenario_tree: Tree = %scenario_tree
 
 # Category items for direct access
@@ -18,31 +16,28 @@ var antenna_id_counter: int = 0
 
 
 func _ready() -> void:
-	if not is_instance_valid(scenario_tree):
-		printerr("RightSidebarPanel: ScenarioTree node not found! Ensure it exists at path ScenarioTreeContainer/ScenarioTree in RightSidebarPanel.tscn")
-		return
+	# --- Connect to the global data store ---
+	SimData.element_added.connect(_on_simulation_data_element_added)
+	SimData.element_updated.connect(_on_simulation_data_element_updated)
+	SimData.element_removed.connect(_on_simulation_data_element_removed)
 
+	# --- Local Node Setup ---
 	scenario_tree.columns = 1
 	scenario_tree.hide_root = true
-	scenario_tree.connect("item_selected", Callable(self, "_on_scenario_tree_item_selected"))
+	scenario_tree.item_selected.connect(_on_scenario_tree_item_selected)
 
 	var tree_root: TreeItem = scenario_tree.create_item()
 
-	# --- Permanent Elements ---
+	# Create static categories. The items will be added dynamically.
 	_add_permanent_item(tree_root, "Simulation Name", "sim_name", "global_simulation_name")
 	_add_permanent_item(tree_root, "Simulation Parameters", "sim_params", "global_simulation_parameters")
 
-	# --- Modifiable Element Categories ---
 	platforms_category_item = _add_category_item(tree_root, "Platforms", "category_platforms")
 	pulses_category_item = _add_category_item(tree_root, "Pulses", "category_pulses")
 	timing_sources_category_item = _add_category_item(tree_root, "Timing Sources", "category_timing_sources")
 	antennas_category_item = _add_category_item(tree_root, "Antennas", "category_antennas")
 
-	platforms_category_item.set_selectable(0, false)
-	pulses_category_item.set_selectable(0, false)
-	timing_sources_category_item.set_selectable(0, false)
-	antennas_category_item.set_selectable(0, false)
-
+	# --- Add Element UI ---
 	var add_menu_button = MenuButton.new()
 	add_menu_button.text = "Add Element"
 	var popup_menu = add_menu_button.get_popup()
@@ -50,22 +45,12 @@ func _ready() -> void:
 	popup_menu.add_item("Pulse", 1)
 	popup_menu.add_item("Timing Source", 2)
 	popup_menu.add_item("Antenna", 3)
-
-	popup_menu.connect("id_pressed", _on_add_menu_id_pressed)
+	popup_menu.id_pressed.connect(_on_add_menu_id_pressed)
 	add_child(add_menu_button)
 	move_child(add_menu_button, 1)
 
 
-func _on_add_menu_id_pressed(id: int):
-	var element_type_str: String
-	match id:
-		0: element_type_str = "platform"
-		1: element_type_str = "pulse"
-		2: element_type_str = "timing_source"
-		3: element_type_str = "antenna"
-	_on_add_new_element_pressed(element_type_str)
-
-
+# --- UI Creation Helpers ---
 func _add_permanent_item(parent: TreeItem, text: String, id_val: String, type_val: String) -> TreeItem:
 	var item: TreeItem = parent.create_child()
 	item.set_text(0, text)
@@ -73,77 +58,70 @@ func _add_permanent_item(parent: TreeItem, text: String, id_val: String, type_va
 	return item
 
 
-# Helper to add category items
 func _add_category_item(parent: TreeItem, text: String, type_val: String) -> TreeItem:
 	var item: TreeItem = parent.create_child()
 	item.set_text(0, text)
 	item.set_metadata(0, {"type": type_val})
+	item.set_selectable(0, false)
 	item.set_custom_color(0, Color.GRAY)
 	return item
 
 
-func _add_action_button(text: String, method_name: String, binds: Array = []) -> Button:
-	var button = Button.new()
-	button.text = text
-	button.connect("pressed", Callable(self, method_name).bindv(binds))
-	add_child(button)
-	return button
-
-
+# --- Local Signal Handlers ---
 func _on_scenario_tree_item_selected() -> void:
 	var selected_item: TreeItem = scenario_tree.get_selected()
 	if selected_item:
 		var metadata: Dictionary = selected_item.get_metadata(0)
-		# Only emit signal for items that represent actual data elements (have an 'id')
 		if metadata and metadata.has("id"):
-			emit_signal("element_selected", metadata)
+			# Instead of emitting a signal, we notify the central data store.
+			SimData.set_selected_element_id(metadata.id)
 
 
-func _on_add_new_element_pressed(element_type_str: String) -> void:
+func _on_add_menu_id_pressed(id: int) -> void:
+	var element_type_str: String
 	var item_name_prefix: String
 	var item_id: String
+	var current_counter_value: int
 
-	match element_type_str:
-		"platform":
+	match id:
+		0:
 			platform_id_counter += 1
-			item_id = "platform_%d" % platform_id_counter
+			current_counter_value = platform_id_counter
+			element_type_str = "platform"
+			item_id = "platform_%d" % current_counter_value
 			item_name_prefix = "Platform"
-		"pulse":
+		1:
 			pulse_id_counter += 1
-			item_id = "pulse_%d" % pulse_id_counter
+			current_counter_value = pulse_id_counter
+			element_type_str = "pulse"
+			item_id = "pulse_%d" % current_counter_value
 			item_name_prefix = "Pulse"
-		"timing_source":
+		2: # Timing Source
 			timing_id_counter += 1
-			item_id = "timing_%d" % timing_id_counter
+			current_counter_value = timing_id_counter
+			element_type_str = "timing_source"
+			item_id = "timing_%d" % current_counter_value
 			item_name_prefix = "TimingSource"
-		"antenna":
+		3: # Antenna
 			antenna_id_counter += 1
-			item_id = "antenna_%d" % antenna_id_counter
+			current_counter_value = antenna_id_counter
+			element_type_str = "antenna"
+			item_id = "antenna_%d" % current_counter_value
 			item_name_prefix = "Antenna"
 		_:
-			printerr("RightSidebarPanel: Unknown element type to add: ", element_type_str)
+			printerr("RightSidebarPanel: Unknown element type to add.")
 			return
-
-	var current_counter_value: int
-	match element_type_str:
-		"platform": current_counter_value = platform_id_counter
-		"pulse": current_counter_value = pulse_id_counter
-		"timing_source": current_counter_value = timing_id_counter
-		"antenna": current_counter_value = antenna_id_counter
 
 	var item_name: String = "%s_%d" % [item_name_prefix, current_counter_value]
 
-	var metadata_for_main: Dictionary = {
-		"type": element_type_str,
-		"id": item_id,
-		"name": item_name
-	}
-	emit_signal("add_new_element_requested", metadata_for_main)
+	# Instead of emitting a signal, we call the central data store directly.
+	SimData.add_new_element(element_type_str, item_name, item_id)
 
 
-func create_and_select_tree_item(item_creation_metadata: Dictionary) -> void:
+# --- SimulationData Signal Handlers (This is the reactive part) ---
+func _on_simulation_data_element_added(element_data: Dictionary) -> void:
 	var parent_category_item: TreeItem
-	var item_type_str: String = item_creation_metadata.get("type", "")
+	var item_type_str: String = element_data.type
 
 	match item_type_str:
 		"platform": parent_category_item = platforms_category_item
@@ -151,58 +129,35 @@ func create_and_select_tree_item(item_creation_metadata: Dictionary) -> void:
 		"timing_source": parent_category_item = timing_sources_category_item
 		"antenna": parent_category_item = antennas_category_item
 		_:
-			printerr("RightSidebarPanel: Cannot determine parent TreeItem for type: ", item_type_str)
+			# This covers permanent items which are already in the tree.
 			return
 
-	if not is_instance_valid(parent_category_item):
-		printerr("RightSidebarPanel: Parent category TreeItem is invalid for type: ", item_type_str)
-		return
+	var new_item := parent_category_item.create_child()
+	new_item.set_text(0, element_data.name)
+	new_item.set_metadata(0, {"id": element_data.id, "type": element_data.type, "name": element_data.name})
 
-	var item_name_to_display: String = item_creation_metadata.get("name", "Unnamed Item")
-	var item_id: String = item_creation_metadata.get("id", "unknown_id_")
-
-	var new_item: TreeItem = parent_category_item.create_child()
-	if new_item:
-		new_item.set_text(0, item_name_to_display)
-		var tree_item_meta: Dictionary = {
-			"type": item_type_str,
-			"id": item_id,
-			"name": item_name_to_display
-		}
-		new_item.set_metadata(0, tree_item_meta)
-
-		var currently_selected: TreeItem = scenario_tree.get_selected()
-		if is_instance_valid(currently_selected):
-			currently_selected.deselect(0)
-
-		new_item.select(0)
-		scenario_tree.set_selected(new_item, 0)
-		scenario_tree.scroll_to_item(new_item, true)
-	else:
-		printerr("RightSidebarPanel: Failed to create TreeItem for '", item_name_to_display, "'")
+	# Select the newly created item in the tree
+	scenario_tree.set_selected(new_item, 0)
+	scenario_tree.scroll_to_item(new_item, true)
 
 
-func update_item_name(item_id: String, new_name: String) -> void:
-	if not is_instance_valid(scenario_tree) or not is_instance_valid(scenario_tree.get_root()):
-		printerr("RightSidebarPanel: Scenario tree or root is not available for update_item_name.")
-		return
-
-	var item_to_update: TreeItem = _find_item_by_id(item_id, scenario_tree.get_root())
+func _on_simulation_data_element_updated(element_id: String, element_data: Dictionary) -> void:
+	var item_to_update := _find_item_by_id(element_id, scenario_tree.get_root())
 	if is_instance_valid(item_to_update):
-		item_to_update.set_text(0, new_name)
-		var meta: Variant = item_to_update.get_metadata(0)
-		if meta is Dictionary:
-			var dict_meta: Dictionary = meta
-			dict_meta["name"] = new_name
-			item_to_update.set_metadata(0, dict_meta)
-		elif meta == null:
-			var new_meta_dict: Dictionary = {"id": item_id, "name": new_name}
-			printerr("RightSidebarPanel: Warning - item '%s' found by ID had null metadata. Re-creating." % item_id)
-			item_to_update.set_metadata(0, new_meta_dict)
-		else:
-			printerr("RightSidebarPanel: Warning - item '%s' metadata is not a Dictionary." % item_id)
+		var name_prop = element_data.get("name", element_data.get("name_value"))
+		item_to_update.set_text(0, str(name_prop))
+		var meta: Dictionary = item_to_update.get_metadata(0)
+		meta["name"] = str(name_prop)
+		item_to_update.set_metadata(0, meta)
 
 
+func _on_simulation_data_element_removed(element_id: String) -> void:
+	var item_to_remove := _find_item_by_id(element_id, scenario_tree.get_root())
+	if is_instance_valid(item_to_remove):
+		item_to_remove.free() # Removes item from tree
+
+
+# --- Helper Methods ---
 func _find_item_by_id(id_to_find: String, current_item: TreeItem) -> TreeItem:
 	if not is_instance_valid(current_item):
 		return null
@@ -218,18 +173,3 @@ func _find_item_by_id(id_to_find: String, current_item: TreeItem) -> TreeItem:
 			return found_in_child
 		child = child.get_next()
 	return null
-
-
-func select_default_item() -> void:
-	if is_instance_valid(scenario_tree) and is_instance_valid(scenario_tree.get_root()):
-		var first_data_item: TreeItem = scenario_tree.get_root().get_first_child()
-		if is_instance_valid(first_data_item):
-			# Ensure it's actually selectable (not a category if categories were made selectable)
-			if first_data_item.is_selectable(0):
-				first_data_item.select(0)
-				scenario_tree.set_selected(first_data_item, 0)
-			else:
-				var next_item: TreeItem = first_data_item.get_next()
-				if is_instance_valid(next_item) and next_item.is_selectable(0):
-					next_item.select(0)
-					scenario_tree.set_selected(next_item, 0)
