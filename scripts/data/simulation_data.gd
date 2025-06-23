@@ -9,6 +9,8 @@ signal element_added(element_data: Dictionary)
 signal element_updated(element_id: String, element_data: Dictionary)
 ## Emitted when an element is removed.
 signal element_removed(element_id: String)
+## Emitted when a property is being changed in real-time for preview purposes, without committing it to the data store.
+signal property_preview_updated(element_id: String, property_key: String, new_value: Variant)
 ## Emitted when a new element is selected in the UI. The payload is the element's ID.
 signal element_selected(element_id: String)
 # The single source of truth for all data.
@@ -83,6 +85,12 @@ func remove_element(element_id: String) -> void:
 		set_selected_element_id("sim_name")
 
 	emit_signal("element_removed", element_id)
+
+
+func update_property_for_preview(element_id: String, property_key: String, new_value: Variant) -> void:
+	# This method does NOT change the underlying data, it only emits a signal
+	# for views that want to display a live preview of a change.
+	emit_signal("property_preview_updated", element_id, property_key, new_value)
 
 
 func update_element_property(element_id: String, property_key: String, new_value: Variant) -> void:

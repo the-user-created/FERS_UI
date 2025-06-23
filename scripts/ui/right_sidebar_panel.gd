@@ -44,6 +44,14 @@ func _ready() -> void:
 	add_child(add_menu_button)
 	move_child(add_menu_button, 1)
 
+	# --- Initial population for existing elements ---
+	var all_platforms = SimData.get_elements_by_type("platform")
+	for platform_data in all_platforms:
+		var new_item := platforms_category_item.create_child()
+		new_item.set_text(0, platform_data.name)
+		new_item.set_metadata(0, {"id": platform_data.id, "type": platform_data.type, "name": platform_data.name})
+		new_item.set_custom_color(0, platform_data.get("color", Color.WHITE))
+
 
 # --- UI Creation Helpers ---
 func _add_permanent_item(parent: TreeItem, text: String, id_val: String, type_val: String) -> TreeItem:
@@ -105,6 +113,9 @@ func _on_simulation_data_element_added(element_data: Dictionary) -> void:
 	new_item.set_text(0, element_data.name)
 	new_item.set_metadata(0, {"id": element_data.id, "type": element_data.type, "name": element_data.name})
 
+	if item_type_str == "platform":
+		new_item.set_custom_color(0, element_data.get("color", Color.WHITE))
+
 	# Select the newly created item in the tree
 	scenario_tree.set_selected(new_item, 0)
 	scenario_tree.scroll_to_item(new_item, true)
@@ -119,6 +130,9 @@ func _on_simulation_data_element_updated(element_id: String, element_data: Dicti
 			var meta: Dictionary = item_to_update.get_metadata(0)
 			meta["name"] = str(name_prop)
 			item_to_update.set_metadata(0, meta)
+
+		if element_data.get("type") == "platform":
+			item_to_update.set_custom_color(0, element_data.get("color", Color.WHITE))
 
 
 func _on_simulation_data_element_removed(element_id: String) -> void:

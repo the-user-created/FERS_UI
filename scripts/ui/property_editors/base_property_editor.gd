@@ -35,8 +35,6 @@ func display_properties(element_id: String, element_data: Dictionary) -> void:
 # --- Virtual Methods for Children to Implement ---
 ## Child classes must override this method to build their specific UI.
 func _rebuild_ui() -> void:
-	# This method should be implemented by inheriting classes.
-	# Example: _add_string_editor("Name", "name", current_element_data.get("name"))
 	push_warning("BasePropertyEditor._rebuild_ui() was called, but should be overridden by the child class.")
 
 
@@ -209,6 +207,28 @@ func _add_dynamic_element_dropdown(label_text: String, property_key: String, ite
 	for item_dict in available_elements:
 		options_for_btn.append({"name": str(item_dict.name), "value": str(item_dict.id)})
 	_add_option_button(label_text, property_key, options_for_btn, current_selection_id)
+
+
+func _add_color_picker(label_text: String, property_key: String, current_color: Color) -> void:
+	var hbox := HBoxContainer.new()
+	var label := Label.new(); label.text = label_text + ":"; label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hbox.add_child(label)
+
+	var color_picker_btn := ColorPickerButton.new()
+	color_picker_btn.color = current_color
+	color_picker_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	# For live preview: emit a preview signal that doesn't cause a UI rebuild.
+	color_picker_btn.color_changed.connect(
+		func(new_color: Color): SimData.update_property_for_preview(current_element_id, property_key, new_color)
+	)
+
+	color_picker_btn.popup_closed.connect(
+		func(): _emit_property_change(property_key, color_picker_btn.color)
+	)
+
+	hbox.add_child(color_picker_btn)
+	add_child(hbox)
 
 
 func _add_file_picker(label_text: String, property_key: String, current_path: String, dialog_title: String) -> void:

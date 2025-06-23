@@ -30,6 +30,7 @@ func display_properties(element_id: String, element_data: Dictionary) -> void:
 
 func _rebuild_ui() -> void:
 	_add_string_editor("Name", "name", current_element_data.get("name", "Unnamed"))
+	_add_color_picker("Display Color", "color", current_element_data.get("color", Color.WHITE))
 	add_child(HSeparator.new())
 
 	# --- Platform Type ---

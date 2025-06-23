@@ -6,6 +6,7 @@ static func getDefaultData(elementType: String, elName: String, elId: String) ->
 	match elementType:
 		"platform":
 			base_data.merge({
+				"color": Color.from_hsv(randf(), 0.8, 1.0),
 				"platform_type_actual": "target",
 				"motion_path": {
 					"interpolation": "static", # static, linear, cubic
@@ -114,6 +115,7 @@ static func preparePlatformDataForSubtypeChange(existingData: Dictionary, newSub
 		"id": existingData.id,
 		"type": "platform",
 		"name": existingData.name,
+		"color": existingData.get("color", Color.from_hsv(randf(), 0.8, 1.0)),
 		"motion_path": existingData.get("motion_path", default_platform_data.motion_path),
 		"rotation_model": existingData.get("rotation_model", default_platform_data.rotation_model),
 		"platform_type_actual": newSubtype
