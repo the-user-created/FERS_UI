@@ -1,7 +1,23 @@
 class_name World3DView
 extends SubViewportContainer
 
+# --- EXPORTS ---
+@export_category("Camera Control")
+@export var rotation_speed: float = 0.004
+@export var pan_speed: float = 0.01
+@export var zoom_speed: float = 1.1
+
+# --- ONREADY VARIABLES ---
 @onready var world_3d_root: Node3D = %world_3d_root
+@onready var camera: Camera3D = %simulation_3d_viewport.get_node("world_3d_root/main_camera_3d")
+
+# --- CAMERA STATE ---
+var _target_position := Vector3.ZERO
+var _camera_distance: float = 12.0
+var _camera_yaw: float = 0.0 # Rotation around Y-axis
+var _camera_pitch: float = deg_to_rad(20.0) # Rotation around X-axis
+var _is_rotating: bool = false
+var _is_panning: bool = false
 
 
 func _ready() -> void:
@@ -108,3 +124,66 @@ func remove_platform_visualization(element_id: String) -> void:
 	var platform_node: Node3D = world_3d_root.get_node_or_null(element_id) as Node3D
 	if platform_node:
 		platform_node.queue_free()
+
+
+# --- Camera Control ---
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			_is_rotating = mouse_event.is_pressed()
+			get_viewport().set_input_as_handled()
+		elif mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
+			_is_panning = mouse_event.is_pressed()
+			get_viewport().set_input_as_handled()
+		elif mouse_event.is_pressed():
+			if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				_camera_distance = max(0.1, _camera_distance / zoom_speed)
+				get_viewport().set_input_as_handled()
+			elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				_camera_distance *= zoom_speed
+				get_viewport().set_input_as_handled()
+
+	if event is InputEventMouseMotion:
+		var motion_event := event as InputEventMouseMotion
+		if _is_rotating:
+			_camera_yaw -= motion_event.relative.x * rotation_speed
+			_camera_pitch = clamp(_camera_pitch - motion_event.relative.y * rotation_speed, -PI / 2.0 + 0.01, PI / 2.0 - 0.01)
+			get_viewport().set_input_as_handled()
+		elif _is_panning:
+			# Use camera's basis vectors to pan relative to view
+			var right := camera.global_transform.basis.x
+			var up := camera.global_transform.basis.y
+			_target_position -= right * motion_event.relative.x * pan_speed
+			_target_position += up * motion_event.relative.y * pan_speed
+			get_viewport().set_input_as_handled()
+
+
+func _process(_delta: float) -> void:
+	# This ensures that if the mouse button is released outside the viewport,
+	# we stop panning/rotating.
+	if _is_rotating and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+		_is_rotating = false
+	if _is_panning and not Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
+		_is_panning = false
+		
+	_update_camera_transform()
+
+
+func _update_camera_transform() -> void:
+	if not is_instance_valid(camera):
+		return
+	camera.transform.basis = Basis() # Reset rotation
+	camera.position = _target_position
+	camera.rotate_object_local(Vector3.UP, _camera_yaw)
+	camera.rotate_object_local(Vector3.RIGHT, _camera_pitch)
+	camera.translate_object_local(Vector3(0, 0, _camera_distance))
+
+
+func focus_on_element(element_id: String) -> void:
+	var platform_node := world_3d_root.get_node_or_null(element_id) as Node3D
+	if not is_instance_valid(platform_node):
+		return
+	
+	var tween := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "_target_position", platform_node.position, 0.5)

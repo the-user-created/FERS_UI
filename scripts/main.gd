@@ -10,6 +10,7 @@ extends Control
 @onready var right_sidebar: Control = %right_sidebar
 @onready var toggle_left_sidebar_button: Button = %toggle_left_sidebar_button
 @onready var toggle_right_sidebar_button: Button = %toggle_right_sidebar_button
+@onready var world_3d_view: World3DView = %world_3d_view
 
 
 # --- GODOT VIRTUAL METHODS ---
@@ -17,6 +18,7 @@ func _ready() -> void:
 	# Connect local UI interaction signals
 	toggle_left_sidebar_button.pressed.connect(_on_toggle_left_sidebar_button_pressed)
 	toggle_right_sidebar_button.pressed.connect(_on_toggle_right_sidebar_button_pressed)
+	right_sidebar.camera_focus_requested.connect(_on_camera_focus_requested)
 
 	# Set initial UI state
 	toggle_left_sidebar_button.text = "<" if left_sidebar.visible else ">"
@@ -33,6 +35,10 @@ func _on_toggle_left_sidebar_button_pressed() -> void:
 
 func _on_toggle_right_sidebar_button_pressed() -> void:
 	_toggle_sidebar(right_sidebar, toggle_right_sidebar_button, false)
+
+
+func _on_camera_focus_requested(element_id: String) -> void:
+	world_3d_view.focus_on_element(element_id)
 
 
 # --- PRIVATE HELPER METHODS ---

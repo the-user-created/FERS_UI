@@ -1,6 +1,8 @@
 class_name RightSidebarPanel
 extends VBoxContainer
 
+signal camera_focus_requested(element_id: String)
+
 @onready var scenario_tree: Tree = %scenario_tree
 
 # Category items for direct access
@@ -20,6 +22,7 @@ func _ready() -> void:
 	scenario_tree.columns = 1
 	scenario_tree.hide_root = true
 	scenario_tree.item_selected.connect(_on_scenario_tree_item_selected)
+	scenario_tree.item_activated.connect(_on_scenario_tree_item_activated)
 
 	var tree_root: TreeItem = scenario_tree.create_item()
 
@@ -78,6 +81,16 @@ func _on_scenario_tree_item_selected() -> void:
 		if metadata and metadata.has("id"):
 			# Instead of emitting a signal, we notify the central data store.
 			SimData.set_selected_element_id(metadata.id)
+
+
+func _on_scenario_tree_item_activated() -> void:
+	var activated_item: TreeItem = scenario_tree.get_selected()
+	if not is_instance_valid(activated_item):
+		return
+
+	var metadata: Dictionary = activated_item.get_metadata(0)
+	if metadata and metadata.get("type") == "platform":
+		emit_signal("camera_focus_requested", metadata.get("id"))
 
 
 func _on_add_menu_id_pressed(id: int) -> void:
