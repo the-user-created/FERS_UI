@@ -33,7 +33,7 @@ func _rebuild_ui() -> void:
 	add_child(HSeparator.new())
 
 	# --- Platform Type ---
-	var platform_types = [
+	var platform_types: Array[Variant] = [
 		{"name": "Monostatic", "value": "monostatic"}, {"name": "Transmitter", "value": "transmitter"},
 		{"name": "Receiver", "value": "receiver"}, {"name": "Target", "value": "target"}
 	]
@@ -52,22 +52,16 @@ func _rebuild_ui() -> void:
 	# --- Rotation Model ---
 	_add_title_label("Rotation Model")
 	var rotation_model = current_element_data.get("rotation_model", {})
-	var rotation_types = [{"name": "Fixed Rate", "value": "fixed"}, {"name": "Waypoint Path", "value": "path"}]
+	var rotation_types: Array[Variant] = [{"name": "Fixed Rate", "value": "fixed"}, {"name": "Waypoint Path", "value": "path"}]
 	_add_option_button("Rotation Type", "rotation_model_type", rotation_types, rotation_model.get("type", "fixed"))
 
 	match rotation_model.get("type", "fixed"):
 		"fixed":
 			var fixed_data = rotation_model.get("fixed_rotation_data", {})
-			var az_edit: NumericLineEdit = _add_numerical_editor("Start Azimuth (deg)", "rotation_model.fixed_rotation_data.start_azimuth", float(fixed_data.get("start_azimuth", 0.0)))
-			var el_edit: NumericLineEdit = _add_numerical_editor("Start Elevation (deg)", "rotation_model.fixed_rotation_data.start_elevation", float(fixed_data.get("start_elevation", 0.0)))
-			var az_rate_edit: NumericLineEdit = _add_numerical_editor("Azimuth Rate (deg/s)", "rotation_model.fixed_rotation_data.azimuth_rate", float(fixed_data.get("azimuth_rate", 0.0)))
-			var el_rate_edit: NumericLineEdit = _add_numerical_editor("Elevation Rate (deg/s)", "rotation_model.fixed_rotation_data.elevation_rate", float(fixed_data.get("elevation_rate", 0.0)))
-
-			# Connect to the new nested property helper
-			az_edit.text_submitted.connect(func(val): _on_nested_property_changed(val.to_float(), "rotation_model", "fixed_rotation_data.start_azimuth"))
-			el_edit.text_submitted.connect(func(val): _on_nested_property_changed(val.to_float(), "rotation_model", "fixed_rotation_data.start_elevation"))
-			az_rate_edit.text_submitted.connect(func(val): _on_nested_property_changed(val.to_float(), "rotation_model", "fixed_rotation_data.azimuth_rate"))
-			el_rate_edit.text_submitted.connect(func(val): _on_nested_property_changed(val.to_float(), "rotation_model", "fixed_rotation_data.elevation_rate"))
+			_add_numerical_editor("Start Azimuth (deg)", "rotation_model.fixed_rotation_data.start_azimuth", float(fixed_data.get("start_azimuth", 0.0)))
+			_add_numerical_editor("Start Elevation (deg)", "rotation_model.fixed_rotation_data.start_elevation", float(fixed_data.get("start_elevation", 0.0)))
+			_add_numerical_editor("Azimuth Rate (deg/s)", "rotation_model.fixed_rotation_data.azimuth_rate", float(fixed_data.get("azimuth_rate", 0.0)))
+			_add_numerical_editor("Elevation Rate (deg/s)", "rotation_model.fixed_rotation_data.elevation_rate", float(fixed_data.get("elevation_rate", 0.0)))
 
 		"path":
 			var path_data = rotation_model.get("rotation_path_data", {})
@@ -127,7 +121,7 @@ func _populate_target_props() -> void:
 	else:
 		_add_file_picker("RCS Filename", "target_rcs_filename", current_element_data.get("target_rcs_filename", ""), "Select RCS File (*.csv, *.xml)")
 
-	var fluct_model_types = ["constant", "chisquare", "gamma"]
+	var fluct_model_types: Array[Variant] = ["constant", "chisquare", "gamma"]
 	_add_option_button("Fluctuation Model", "target_rcs_fluctuation_model_type", fluct_model_types, current_element_data.get("target_rcs_fluctuation_model_type", "constant"))
 	var fluct_model = current_element_data.get("target_rcs_fluctuation_model_type", "constant")
 	if fluct_model == "constant":

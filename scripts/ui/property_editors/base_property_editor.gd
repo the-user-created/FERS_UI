@@ -79,6 +79,17 @@ func _on_delete_button_pressed() -> void:
 # --- Data Communication ---
 ## Central function to notify the data store of a change.
 func _emit_property_change(property_key: String, new_value: Variant) -> void:
+	# If the property key indicates a nested structure (contains a dot), delegate to the helper.
+	if "." in property_key:
+		var path_parts: Array = property_key.split(".", false, 1)
+		# Ensure we have a top-level key and a nested path.
+		if path_parts.size() == 2:
+			var top_level_key: String = path_parts[0]
+			var nested_path: String = path_parts[1]
+			_on_nested_property_changed(new_value, top_level_key, nested_path)
+			return # The nested helper will emit the final change.
+
+	# If not nested, or if the split failed, treat as a direct property update.
 	SimData.update_element_property(current_element_id, property_key, new_value)
 
 
