@@ -5,6 +5,8 @@ extends SubViewportContainer
 @export_category("Camera Control")
 @export var rotation_speed: float = 0.004
 @export var pan_speed: float = 0.01
+@export var keyboard_pan_speed: float = 5.0 # m/s
+@export var keyboard_orbit_speed: float = 1.5 # rad/s
 @export var zoom_speed: float = 1.1
 
 # --- ONREADY VARIABLES ---
@@ -19,10 +21,14 @@ var _camera_pitch: float = deg_to_rad(20.0) # Rotation around X-axis
 var _is_rotating: bool = false
 var _is_panning: bool = false
 var _cubic_dd_cache: Dictionary = {}
+var _has_focus: bool = false
 
 
 func _ready() -> void:
 	stretch = true
+	focus_mode = Control.FOCUS_ALL
+	focus_entered.connect(func(): _has_focus = true)
+	focus_exited.connect(func(): _has_focus = false)
 
 	# Connect to the global data store to react to data changes.
 	SimData.simulation_time_updated.connect(_update_all_platform_positions)
@@ -367,6 +373,13 @@ func _finalize_cubic(waypoints: Array) -> Array[Vector3]:
 
 # --- Camera Control ---
 func _gui_input(event: InputEvent) -> void:
+	# If viewport is focused, consume key events to prevent UI navigation.
+	if _has_focus and event is InputEventKey:
+		match event.keycode:
+			KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_W, KEY_A, KEY_S, KEY_D, KEY_Q, KEY_E:
+				get_viewport().set_input_as_handled()
+				return # It's a key event, not a mouse one, so we are done.
+
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
@@ -398,13 +411,44 @@ func _gui_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	# This ensures that if the mouse button is released outside the viewport,
 	# we stop panning/rotating.
 	if _is_rotating and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		_is_rotating = false
 	if _is_panning and not Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
 		_is_panning = false
+
+	if _has_focus:
+		# --- Keyboard Panning (WASDQE) ---
+		var pan_input := Vector3.ZERO
+		if Input.is_key_pressed(KEY_W): pan_input.z += 1
+		if Input.is_key_pressed(KEY_S): pan_input.z -= 1
+		if Input.is_key_pressed(KEY_A): pan_input.x -= 1
+		if Input.is_key_pressed(KEY_D): pan_input.x += 1
+		if Input.is_key_pressed(KEY_E): pan_input.y += 1
+		if Input.is_key_pressed(KEY_Q): pan_input.y -= 1
+
+		if is_instance_valid(camera) and pan_input != Vector3.ZERO:
+			# Get camera's forward and right vectors on the horizontal plane
+			var forward := -camera.global_transform.basis.z.slide(Vector3.UP).normalized()
+			var right := camera.global_transform.basis.x.slide(Vector3.UP).normalized()
+			# Pan on XZ plane
+			_target_position += right * pan_input.x * keyboard_pan_speed * delta
+			_target_position += forward * pan_input.z * keyboard_pan_speed * delta
+			# Pan on Y axis
+			_target_position.y += pan_input.y * keyboard_pan_speed * delta
+
+		# --- Keyboard Orbiting (Arrow Keys) ---
+		var orbit_input := Vector2.ZERO
+		if Input.is_key_pressed(KEY_LEFT): orbit_input.x -= 1
+		if Input.is_key_pressed(KEY_RIGHT): orbit_input.x += 1
+		if Input.is_key_pressed(KEY_UP): orbit_input.y -= 1
+		if Input.is_key_pressed(KEY_DOWN): orbit_input.y += 1
+
+		if orbit_input != Vector2.ZERO:
+			_camera_yaw += orbit_input.x * keyboard_orbit_speed * delta
+			_camera_pitch = clamp(_camera_pitch + orbit_input.y * keyboard_orbit_speed * delta, -PI / 2.0 + 0.01, PI / 2.0 - 0.01)
 
 	_update_camera_transform()
 
@@ -424,5 +468,8 @@ func focus_on_element(element_id: String) -> void:
 	if not is_instance_valid(platform_node):
 		return
 
+	# A sensible distance to frame a platform of radius 0.5
+	var new_camera_distance = 10.0
 	var tween := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(self, "_target_position", platform_node.position, 0.5)
+	tween.parallel().tween_property(self, "_camera_distance", new_camera_distance, 0.5)
