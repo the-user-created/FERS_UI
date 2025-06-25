@@ -3,8 +3,8 @@ extends SubViewportContainer
 
 # --- EXPORTS ---
 @export_category("Camera Control")
-@export var rotation_speed: float = 0.004
-@export var pan_speed: float = 0.01
+@export var rotation_speed: float = 0.005
+@export var pan_speed: float = 0.001 # Multiplied by camera distance for adaptive speed
 @export var keyboard_pan_speed: float = 5.0 # m/s
 @export var keyboard_orbit_speed: float = 1.5 # rad/s
 @export var zoom_speed: float = 1.1
@@ -23,6 +23,7 @@ var _is_panning: bool = false
 var _cubic_dd_cache: Dictionary = {}
 var _has_focus: bool = false
 
+# TODO: Make label size for platforms scale with camera distance
 
 func _ready() -> void:
 	stretch = true
@@ -78,12 +79,14 @@ func _on_simulation_data_property_preview_updated(element_id: String, property_k
 func add_platform_visualization(platform_data: Dictionary) -> void:
 	var element_id: String = platform_data.id
 	if world_3d_root.has_node(element_id):
-		update_platform_visualization_properties(element_id, platform_data)
-		return
+		# Node already exists, just update it.
+		return update_platform_visualization_properties(element_id, platform_data)
 
-	# Use a Node3D as the root for the visualization
-	var platform_3d_vis_root = Node3D.new()
+	# Use an Area3D as the root for picking via mouse input.
+	var platform_3d_vis_root = Area3D.new()
 	platform_3d_vis_root.name = element_id
+	platform_3d_vis_root.input_ray_pickable = true
+	platform_3d_vis_root.input_event.connect(_on_platform_input_event.bind(element_id))
 
 	# The sphere itself
 	var platform_sphere = CSGSphere3D.new()
@@ -92,6 +95,14 @@ func add_platform_visualization(platform_data: Dictionary) -> void:
 	var mat = StandardMaterial3D.new()
 	platform_sphere.material = mat
 	platform_3d_vis_root.add_child(platform_sphere)
+	
+	# The collision shape for picking. Must be a child of the Area3D.
+	var collision_shape = CollisionShape3D.new()
+	var sphere_shape = SphereShape3D.new()
+	# The collision shape radius should match the visual sphere radius.
+	sphere_shape.radius = platform_sphere.radius
+	collision_shape.shape = sphere_shape
+	platform_3d_vis_root.add_child(collision_shape)
 
 	# The name label
 	var platform_label = Label3D.new()
@@ -108,7 +119,7 @@ func add_platform_visualization(platform_data: Dictionary) -> void:
 
 
 func update_platform_visualization_properties(element_id: String, platform_data: Dictionary) -> void:
-	var platform_node: Node3D = world_3d_root.get_node_or_null(element_id) as Node3D
+	var platform_node: Area3D = world_3d_root.get_node_or_null(element_id) as Area3D
 	if platform_node:
 		# Update color
 		var sphere := platform_node.get_node_or_null("Sphere") as CSGSphere3D
@@ -129,7 +140,7 @@ func update_platform_visualization_properties(element_id: String, platform_data:
 
 
 func remove_platform_visualization(element_id: String) -> void:
-	var platform_node: Node3D = world_3d_root.get_node_or_null(element_id) as Node3D
+	var platform_node: Area3D = world_3d_root.get_node_or_null(element_id) as Area3D
 	if platform_node:
 		platform_node.queue_free()
 
@@ -143,9 +154,9 @@ func remove_platform_visualization(element_id: String) -> void:
 
 
 func _update_all_platform_positions(time: float) -> void:
-	for node in world_3d_root.get_children():
-		if node is Node3D and node.name.begins_with("platform_"):
-			var element_id: String = node.name
+	for child in world_3d_root.get_children():
+		if child.name.begins_with("platform_") and child is Area3D:
+			var element_id: String = child.name
 			var platform_data: Dictionary = SimData.get_element_data(element_id)
 			if platform_data.is_empty(): continue
 
@@ -154,7 +165,7 @@ func _update_all_platform_positions(time: float) -> void:
 			var interp_type: String = motion_path_data.get("interpolation", "static")
 
 			if waypoints.is_empty():
-				node.position = Vector3.ZERO
+				child.position = Vector3.ZERO
 				continue
 
 			var new_pos := Vector3.ZERO
@@ -164,8 +175,14 @@ func _update_all_platform_positions(time: float) -> void:
 				"cubic":
 					var dd := _get_or_calculate_cubic_dd(element_id, waypoints)
 					if not dd.is_empty():
-						new_pos = _get_position_cubic(time, waypoints, dd)
-			node.position = new_pos
+						new_pos = _get_position_cubic(time, waypoints, dd) # Fallback to linear is handled inside 
+			child.position = new_pos
+
+
+func _on_platform_input_event(_camera: Camera3D, event: InputEvent, _pos: Vector3, _normal: Vector3, _shape_idx: int, element_id: String):
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
+		SimData.set_selected_element_id(element_id)
+		get_viewport().set_input_as_handled()
 
 
 # --- Motion Path Visualization ---
@@ -406,8 +423,9 @@ func _gui_input(event: InputEvent) -> void:
 			# Use camera's basis vectors to pan relative to view
 			var right: Vector3 = camera.global_transform.basis.x
 			var up: Vector3 = camera.global_transform.basis.y
-			_target_position -= right * motion_event.relative.x * pan_speed
-			_target_position += up * motion_event.relative.y * pan_speed
+			var effective_pan_speed = pan_speed * _camera_distance
+			_target_position -= right * motion_event.relative.x * effective_pan_speed
+			_target_position += up * motion_event.relative.y * effective_pan_speed
 			get_viewport().set_input_as_handled()
 
 
@@ -433,11 +451,12 @@ func _process(delta: float) -> void:
 			# Get camera's forward and right vectors on the horizontal plane
 			var forward := -camera.global_transform.basis.z.slide(Vector3.UP).normalized()
 			var right := camera.global_transform.basis.x.slide(Vector3.UP).normalized()
+			var effective_keyboard_pan_speed = keyboard_pan_speed * (_camera_distance / 10.0) * delta
 			# Pan on XZ plane
-			_target_position += right * pan_input.x * keyboard_pan_speed * delta
-			_target_position += forward * pan_input.z * keyboard_pan_speed * delta
+			_target_position += right * pan_input.x * effective_keyboard_pan_speed
+			_target_position += forward * pan_input.z * effective_keyboard_pan_speed
 			# Pan on Y axis
-			_target_position.y += pan_input.y * keyboard_pan_speed * delta
+			_target_position.y += pan_input.y * (keyboard_pan_speed * 0.5) * delta # Make vertical pan less sensitive
 
 		# --- Keyboard Orbiting (Arrow Keys) ---
 		var orbit_input := Vector2.ZERO
@@ -451,6 +470,47 @@ func _process(delta: float) -> void:
 			_camera_pitch = clamp(_camera_pitch + orbit_input.y * keyboard_orbit_speed * delta, -PI / 2.0 + 0.01, PI / 2.0 - 0.01)
 
 	_update_camera_transform()
+
+
+func frame_scene_contents() -> void:
+	var platform_nodes: Array[Area3D]
+	for child in world_3d_root.get_children():
+		if child.name.begins_with("platform_") and child is Area3D:
+			platform_nodes.append(child)
+
+	if platform_nodes.is_empty():
+		# Reset to a default view if no platforms exist
+		var tween_reset := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween_reset.tween_property(self, "_target_position", Vector3.ZERO, 0.5)
+		tween_reset.parallel().tween_property(self, "_camera_distance", 12.0, 0.5)
+		return
+
+	if platform_nodes.size() == 1:
+		focus_on_element(platform_nodes[0].name)
+		return
+
+	# Calculate the AABB that encloses all platforms.
+	var aabb := AABB(platform_nodes[0].position, Vector3.ZERO)
+	for i in range(1, platform_nodes.size()):
+		aabb = aabb.expand(platform_nodes[i].position)
+
+	var new_target_pos = aabb.get_center()
+
+	# Use a bounding sphere approach for a robust distance calculation.
+	var bounding_sphere_radius = aabb.size.length() / 2.0
+	if bounding_sphere_radius < 0.01: # Avoid division by zero if all points are identical.
+		return focus_on_element(platform_nodes[0].name)
+
+	# Get the tightest FOV (vertical or horizontal) to ensure the AABB fits.
+	var v_fov_rad = deg_to_rad(camera.fov)
+	var h_fov_rad = 2 * atan(tan(v_fov_rad / 2) * camera.get_viewport().get_visible_rect().size.aspect())
+	var min_fov = min(v_fov_rad, h_fov_rad)
+
+	var new_cam_distance = (bounding_sphere_radius / tan(min_fov / 2.0)) * 1.2 # Add a 20% margin
+
+	var tween := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "_target_position", new_target_pos, 0.5)
+	tween.parallel().tween_property(self, "_camera_distance", new_cam_distance, 0.5)
 
 
 func _update_camera_transform() -> void:

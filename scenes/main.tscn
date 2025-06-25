@@ -70,6 +70,15 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Time: 0.00s"
 
+[node name="spacer" type="Control" parent="main_layout/middle_view_container/playback_controls"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="frame_scene_button" type="Button" parent="main_layout/middle_view_container/playback_controls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Frame Scene"
+
 [node name="world_3d_view" parent="main_layout/middle_view_container" instance=ExtResource("3_r0du0")]
 unique_name_in_owner = true
 layout_mode = 2

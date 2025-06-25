@@ -16,6 +16,7 @@ extends Control
 @onready var pause_button: Button = %pause_button
 @onready var step_button: Button = %step_button
 @onready var time_label: Label = %time_label
+@onready var frame_scene_button: Button = %frame_scene_button
 
 
 # --- GODOT VIRTUAL METHODS ---
@@ -27,6 +28,7 @@ func _ready() -> void:
 	step_button.pressed.connect(SimData.step)
 	toggle_left_sidebar_button.pressed.connect(_on_toggle_left_sidebar_button_pressed)
 	toggle_right_sidebar_button.pressed.connect(_on_toggle_right_sidebar_button_pressed)
+	frame_scene_button.pressed.connect(world_3d_view.frame_scene_contents)
 	right_sidebar.camera_focus_requested.connect(_on_camera_focus_requested)
 
 	# Set initial UI state
