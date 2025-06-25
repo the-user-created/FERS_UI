@@ -18,18 +18,25 @@ var _camera_yaw: float = 0.0 # Rotation around Y-axis
 var _camera_pitch: float = deg_to_rad(20.0) # Rotation around X-axis
 var _is_rotating: bool = false
 var _is_panning: bool = false
+var _cubic_dd_cache: Dictionary = {}
 
 
 func _ready() -> void:
 	stretch = true
 
 	# Connect to the global data store to react to data changes.
+	SimData.simulation_time_updated.connect(_update_all_platform_positions)
 	SimData.element_added.connect(_on_simulation_data_element_added)
 	SimData.element_updated.connect(_on_simulation_data_element_updated)
 	SimData.element_removed.connect(remove_platform_visualization)
 	SimData.property_preview_updated.connect(_on_simulation_data_property_preview_updated)
 
-	# Populate view with any pre-existing data (e.g. from a loaded file)
+	# Populate view with any pre-existing data (e.g. from a loaded file).
+	# `call_deferred` ensures the scene tree is fully ready.
+	call_deferred("_populate_and_position_initial_platforms")
+
+
+func _populate_and_position_initial_platforms() -> void:
 	var existing_platforms := SimData.get_elements_by_type("platform")
 	for platform_data in existing_platforms:
 		add_platform_visualization(platform_data)
@@ -43,6 +50,8 @@ func _on_simulation_data_element_added(element_data: Dictionary) -> void:
 
 func _on_simulation_data_element_updated(element_id: String, element_data: Dictionary) -> void:
 	if element_data.type == "platform":
+		if _cubic_dd_cache.has(element_id):
+			_cubic_dd_cache.erase(element_id)
 		# This handles both position changes and other property updates.
 		update_platform_visualization_properties(element_id, element_data)
 
@@ -89,19 +98,12 @@ func add_platform_visualization(platform_data: Dictionary) -> void:
 
 	world_3d_root.add_child(platform_3d_vis_root)
 	update_platform_visualization_properties(element_id, platform_data)
+	_update_all_platform_positions(SimData.simulation_time)
 
 
 func update_platform_visualization_properties(element_id: String, platform_data: Dictionary) -> void:
 	var platform_node: Node3D = world_3d_root.get_node_or_null(element_id) as Node3D
 	if platform_node:
-		# Update position
-		var motion_path: Dictionary = platform_data.get("motion_path", {})
-		if motion_path.is_empty() or not motion_path.has("waypoints") or (motion_path.waypoints as Array).is_empty():
-			platform_node.position = Vector3.ZERO
-		else:
-			var first_waypoint: Dictionary = (motion_path.waypoints as Array)[0]
-			platform_node.position = _get_pos_from_waypoint(first_waypoint)
-
 		# Update color
 		var sphere := platform_node.get_node_or_null("Sphere") as CSGSphere3D
 		if sphere:
@@ -115,7 +117,7 @@ func update_platform_visualization_properties(element_id: String, platform_data:
 			label.text = platform_data.get("name", "Unnamed")
 
 		# Update motion path visualization
-		_update_motion_path_visualization(platform_node, platform_data)
+		_update_motion_path_visualization(element_id, platform_data)
 	else:
 		printerr("World3DView: Platform 3D node '", element_id, "' not found for update.")
 
@@ -125,11 +127,45 @@ func remove_platform_visualization(element_id: String) -> void:
 	if platform_node:
 		platform_node.queue_free()
 
+	var path_node_name := "MotionPath_%s" % element_id
+	var path_node: Node3D = world_3d_root.get_node_or_null(path_node_name)
+	if path_node:
+		path_node.queue_free()
+
+	if _cubic_dd_cache.has(element_id):
+		_cubic_dd_cache.erase(element_id)
+
+
+func _update_all_platform_positions(time: float) -> void:
+	for node in world_3d_root.get_children():
+		if node is Node3D and node.name.begins_with("platform_"):
+			var element_id: String = node.name
+			var platform_data: Dictionary = SimData.get_element_data(element_id)
+			if platform_data.is_empty(): continue
+
+			var motion_path_data: Dictionary = platform_data.get("motion_path", {})
+			var waypoints: Array = motion_path_data.get("waypoints", [])
+			var interp_type: String = motion_path_data.get("interpolation", "static")
+
+			if waypoints.is_empty():
+				node.position = Vector3.ZERO
+				continue
+
+			var new_pos := Vector3.ZERO
+			match interp_type:
+				"static": new_pos = _get_pos_from_waypoint(waypoints[0])
+				"linear": new_pos = _get_position_linear(time, waypoints)
+				"cubic":
+					var dd := _get_or_calculate_cubic_dd(element_id, waypoints)
+					if not dd.is_empty():
+						new_pos = _get_position_cubic(time, waypoints, dd)
+			node.position = new_pos
+
 
 # --- Motion Path Visualization ---
-func _update_motion_path_visualization(platform_node: Node3D, platform_data: Dictionary) -> void:
-	var path_node_name := "MotionPath"
-	var path_node: Node3D = platform_node.get_node_or_null(path_node_name)
+func _update_motion_path_visualization(element_id: String, platform_data: Dictionary) -> void:
+	var path_node_name := "MotionPath_%s" % element_id
+	var path_node: Node3D = world_3d_root.get_node_or_null(path_node_name)
 
 	var motion_path_data: Dictionary = platform_data.get("motion_path", {})
 	var waypoints: Array = motion_path_data.get("waypoints", [])
@@ -145,7 +181,7 @@ func _update_motion_path_visualization(platform_node: Node3D, platform_data: Dic
 	if not path_node:
 		path_node = Node3D.new()
 		path_node.name = path_node_name
-		platform_node.add_child(path_node)
+		world_3d_root.add_child(path_node)
 	else:
 		for child in path_node.get_children():
 			child.queue_free()
@@ -162,7 +198,7 @@ func _update_motion_path_visualization(platform_node: Node3D, platform_data: Dic
 
 	var dd: Array[Vector3] = []
 	if interpolation_type == "cubic":
-		dd = _finalize_cubic(waypoints)
+		dd = _get_or_calculate_cubic_dd(element_id, waypoints)
 		if dd.is_empty(): # Fallback to linear if cubic calculation fails
 			interpolation_type = "linear"
 
@@ -186,8 +222,8 @@ func _update_motion_path_visualization(platform_node: Node3D, platform_data: Dic
 	imm_mesh.surface_begin(Mesh.PRIMITIVE_LINES)
 	# Draw dotted line by skipping every other segment
 	for i in range(0, path_points.size() - 1, 2):
-		imm_mesh.surface_add_vertex(path_points[i] - platform_node.position)
-		imm_mesh.surface_add_vertex(path_points[i+1] - platform_node.position)
+		imm_mesh.surface_add_vertex(path_points[i])
+		imm_mesh.surface_add_vertex(path_points[i+1])
 	imm_mesh.surface_end()
 	mesh_inst.mesh = imm_mesh
 	path_node.add_child(mesh_inst)
@@ -202,7 +238,7 @@ func _update_motion_path_visualization(platform_node: Node3D, platform_data: Dic
 		label.outline_size = 6
 		label.outline_modulate = Color.BLACK
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		label.position = wp_pos - platform_node.position # Position relative to platform node
+		label.position = wp_pos
 		path_node.add_child(label)
 
 
@@ -266,6 +302,16 @@ func _get_position_cubic(t: float, waypoints: Array, dd: Array) -> Vector3:
 	var d: float = (b*b*b - b) * iws_6
 
 	return _get_pos_from_waypoint(p_left) * a + _get_pos_from_waypoint(p_right) * b + dd[xli_idx] * c + dd[xrp_idx] * d
+
+
+func _get_or_calculate_cubic_dd(element_id: String, waypoints: Array) -> Array:
+	if _cubic_dd_cache.has(element_id):
+		return _cubic_dd_cache[element_id]
+
+	var dd: Array[Vector3] = _finalize_cubic(waypoints)
+	if not dd.is_empty():
+		_cubic_dd_cache[element_id] = dd
+	return dd
 
 
 func _safe_vec_div(numerator: Vector3, denominator: Vector3) -> Vector3:

@@ -13,10 +13,17 @@ signal element_removed(element_id: String)
 signal property_preview_updated(element_id: String, property_key: String, new_value: Variant)
 ## Emitted when a new element is selected in the UI. The payload is the element's ID.
 signal element_selected(element_id: String)
+## Emitted when the simulation time is updated during playback.
+signal simulation_time_updated(new_time: float)
+## Emitted when playback starts or stops.
+signal playback_state_changed(is_playing: bool)
 # The single source of truth for all data.
 var _simulation_elements_data: Dictionary = {}
 # The ID of the currently selected element.
 var _selected_element_id: String = ""
+# --- Playback State ---
+var simulation_time: float = 0.0
+var is_playing: bool = false
 
 var _id_counters: Dictionary = {
 	"platform": 0,
@@ -43,6 +50,17 @@ func _ready() -> void:
 	}
 
 
+func _process(delta: float) -> void:
+	if is_playing:
+		var end_time: float = get_element_data("sim_params").get("end_time", 1.0)
+		simulation_time += delta
+		if simulation_time >= end_time:
+			simulation_time = end_time
+			pause() # Stop playback at the end
+
+		emit_signal("simulation_time_updated", simulation_time)
+
+
 # --- Public API for Data Manipulation ---
 func create_new_element(element_type: String) -> void:
 	if not _id_counters.has(element_type):
@@ -55,7 +73,7 @@ func create_new_element(element_type: String) -> void:
 	var new_element_id: String = "%s_%d" % [element_type, new_id_num]
 	var new_element_name: String = "%s_%d" % [element_type.capitalize(), new_id_num]
 
-	# Get default data (this was already well-designed)
+	# Get default data
 	var new_data_entry: Dictionary = ElementDefaults.getDefaultData(element_type, new_element_name, new_element_id)
 	if new_data_entry.is_empty():
 		printerr("SimulationData: Failed to get default data for element type: ", element_type)
@@ -136,6 +154,36 @@ func set_selected_element_id(element_id: String) -> void:
 	if _selected_element_id != element_id:
 		_selected_element_id = element_id
 		emit_signal("element_selected", _selected_element_id)
+
+
+# --- Public API for Playback Control ---
+func play() -> void:
+	var end_time: float = get_element_data("sim_params").get("end_time", 1.0)
+	# If playback is at the end, rewind before playing.
+	if simulation_time >= end_time:
+		rewind()
+
+	is_playing = true
+	emit_signal("playback_state_changed", is_playing)
+
+
+func pause() -> void:
+	is_playing = false
+	emit_signal("playback_state_changed", is_playing)
+
+
+func rewind() -> void:
+	pause()
+	var start_time: float = get_element_data("sim_params").get("start_time", 0.0)
+	simulation_time = start_time
+	emit_signal("simulation_time_updated", simulation_time)
+
+
+func step() -> void:
+	pause()
+	var end_time: float = get_element_data("sim_params").get("end_time", 1.0)
+	simulation_time = min(simulation_time + (1.0 / 60.0), end_time)
+	emit_signal("simulation_time_updated", simulation_time)
 
 
 # --- Public API for Data Access ---

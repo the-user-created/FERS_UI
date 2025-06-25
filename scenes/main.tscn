@@ -46,20 +46,29 @@ size_flags_vertical = 0
 alignment = 1
 
 [node name="rewind_button" type="Button" parent="main_layout/middle_view_container/playback_controls"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Rewind"
 
 [node name="play_button" type="Button" parent="main_layout/middle_view_container/playback_controls"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Play"
 
 [node name="pause_button" type="Button" parent="main_layout/middle_view_container/playback_controls"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Pause"
 
 [node name="step_button" type="Button" parent="main_layout/middle_view_container/playback_controls"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Step"
+
+[node name="time_label" type="Label" parent="main_layout/middle_view_container/playback_controls"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Time: 0.00s"
 
 [node name="world_3d_view" parent="main_layout/middle_view_container" instance=ExtResource("3_r0du0")]
 unique_name_in_owner = true

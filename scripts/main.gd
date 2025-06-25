@@ -11,11 +11,20 @@ extends Control
 @onready var toggle_left_sidebar_button: Button = %toggle_left_sidebar_button
 @onready var toggle_right_sidebar_button: Button = %toggle_right_sidebar_button
 @onready var world_3d_view: World3DView = %world_3d_view
+@onready var rewind_button: Button = %rewind_button
+@onready var play_button: Button = %play_button
+@onready var pause_button: Button = %pause_button
+@onready var step_button: Button = %step_button
+@onready var time_label: Label = %time_label
 
 
 # --- GODOT VIRTUAL METHODS ---
 func _ready() -> void:
 	# Connect local UI interaction signals
+	rewind_button.pressed.connect(SimData.rewind)
+	play_button.pressed.connect(SimData.play)
+	pause_button.pressed.connect(SimData.pause)
+	step_button.pressed.connect(SimData.step)
 	toggle_left_sidebar_button.pressed.connect(_on_toggle_left_sidebar_button_pressed)
 	toggle_right_sidebar_button.pressed.connect(_on_toggle_right_sidebar_button_pressed)
 	right_sidebar.camera_focus_requested.connect(_on_camera_focus_requested)
@@ -23,6 +32,12 @@ func _ready() -> void:
 	# Set initial UI state
 	toggle_left_sidebar_button.text = "<" if left_sidebar.visible else ">"
 	toggle_right_sidebar_button.text = ">" if right_sidebar.visible else "<"
+	_on_playback_state_changed(SimData.is_playing)
+	_on_simulation_time_updated(SimData.simulation_time)
+
+	# Connect to SimData signals for playback UI
+	SimData.playback_state_changed.connect(_on_playback_state_changed)
+	SimData.simulation_time_updated.connect(_on_simulation_time_updated)
 
 	# Select default item. RightSidebar listens to SimulationData and will populate itself.
 	SimData.call_deferred("set_selected_element_id", "sim_name")
@@ -39,6 +54,15 @@ func _on_toggle_right_sidebar_button_pressed() -> void:
 
 func _on_camera_focus_requested(element_id: String) -> void:
 	world_3d_view.focus_on_element(element_id)
+
+
+func _on_playback_state_changed(is_playing: bool) -> void:
+	play_button.disabled = is_playing
+	pause_button.disabled = not is_playing
+
+
+func _on_simulation_time_updated(new_time: float) -> void:
+	time_label.text = "Time: %.2fs" % new_time
 
 
 # --- PRIVATE HELPER METHODS ---
