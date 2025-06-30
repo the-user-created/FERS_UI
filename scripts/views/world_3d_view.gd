@@ -8,6 +8,8 @@ extends SubViewportContainer
 @export var keyboard_pan_speed: float = 5.0 # m/s
 @export var keyboard_orbit_speed: float = 1.5 # rad/s
 @export var zoom_speed: float = 1.1
+@export_category("Display")
+@export var label_scale_factor: float = 0.0005 # Controls how large labels appear from a distance
 
 # --- ONREADY VARIABLES ---
 @onready var world_3d_root: Node3D = %world_3d_root
@@ -22,8 +24,6 @@ var _is_rotating: bool = false
 var _is_panning: bool = false
 var _cubic_dd_cache: Dictionary = {}
 var _has_focus: bool = false
-
-# TODO: Make label size for platforms scale with camera distance
 
 func _ready() -> void:
 	stretch = true
@@ -386,6 +386,23 @@ func _finalize_cubic(waypoints: Array) -> Array[Vector3]:
 		dd[i] = dd[i] * dd[i+1] + tmp[i]
 
 	return dd
+	
+func _update_all_labels_scale() -> void:
+	var new_pixel_size = _camera_distance * label_scale_factor
+
+	for node in world_3d_root.get_children():
+		# Scale platform labels
+		if node is Area3D and node.name.begins_with("platform_"):
+			var label: Label3D = node.get_node_or_null("NameLabel")
+			if label:
+				label.pixel_size = new_pixel_size
+		# Scale motion path waypoint labels
+		elif node is Node3D and node.name.begins_with("MotionPath_"):
+			for path_child in node.get_children():
+				if path_child is Label3D:
+					# Waypoint labels have smaller font size (48 vs 64), so scale them proportionally
+					# to maintain their relative size difference.
+					path_child.pixel_size = new_pixel_size * (48.0 / 64.0)
 
 
 # --- Camera Control ---
@@ -469,6 +486,7 @@ func _process(delta: float) -> void:
 			_camera_yaw += orbit_input.x * keyboard_orbit_speed * delta
 			_camera_pitch = clamp(_camera_pitch + orbit_input.y * keyboard_orbit_speed * delta, -PI / 2.0 + 0.01, PI / 2.0 - 0.01)
 
+	_update_all_labels_scale()
 	_update_camera_transform()
 
 
