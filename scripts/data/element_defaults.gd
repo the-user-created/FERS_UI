@@ -85,7 +85,7 @@ static func getPlatformSubtypeDefaults(platformSubtype: String) -> Dictionary:
 		"target":
 			return {
 				"target_rcs_type_actual": "isotropic",
-				"target_rcs_value": 10.0,
+				"target_rcs_value": 1.0,
 				"target_rcs_filename": "",
 				"target_rcs_fluctuation_model_type": "constant",
 				"target_rcs_fluctuation_value": 1.0, # For 'constant' model

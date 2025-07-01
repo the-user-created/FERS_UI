@@ -102,6 +102,7 @@ func add_platform_visualization(platform_data: Dictionary) -> void:
 	
 	# The collision shape for picking. Must be a child of the Area3D.
 	var collision_shape = CollisionShape3D.new()
+	collision_shape.name = "CollisionShape" # Naming for easier access during updates
 	var sphere_shape = SphereShape3D.new()
 	# The collision shape radius should match the visual sphere radius.
 	sphere_shape.radius = platform_sphere.radius
@@ -128,18 +129,39 @@ func update_platform_visualization_properties(element_id: String, platform_data:
 	var platform_node: Area3D = world_3d_root.get_node_or_null(element_id) as Area3D
 	if platform_node:
 		var platform_color = platform_data.get("color", Color.WHITE)
-		# Update color
+		# Default radius for non-target platforms or targets without isotropic RCS.
+		var new_radius := 0.5
+
+		# Update color and scale
 		var sphere := platform_node.get_node_or_null("Sphere") as CSGSphere3D
 		if sphere:
 			var mat := sphere.material as StandardMaterial3D
 			if mat:
 				mat.albedo_color = platform_color
 
+			# For targets with isotropic RCS, calculate the physically correct radius.
+			var is_target: bool = platform_data.get("platform_type_actual") == "target"
+			var is_isotropic_rcs: bool = platform_data.get("target_rcs_type_actual") == "isotropic"
+
+			if is_target and is_isotropic_rcs:
+				var rcs_value := float(platform_data.get("target_rcs_value", 1.0))
+				if rcs_value > 0.0:
+					# Calculate the physical radius of a conducting sphere for a given RCS (σ = 4πR²)
+					new_radius = sqrt(rcs_value / (4.0 * PI))
+			
+			sphere.radius = new_radius
+			
+			var collision_shape := platform_node.get_node_or_null("CollisionShape") as CollisionShape3D
+			if collision_shape and collision_shape.shape is SphereShape3D:
+				(collision_shape.shape as SphereShape3D).radius = new_radius
+
 		# Update name label
 		var label := platform_node.get_node_or_null("NameLabel") as Label3D
 		if label:
 			label.text = platform_data.get("name", "Unnamed")
 			label.modulate = platform_color
+			# Position the label just above the sphere's new radius
+			label.position.y = new_radius + 0.5
 
 		# Update motion path visualization
 		_update_motion_path_visualization(element_id, platform_data)
