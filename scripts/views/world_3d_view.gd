@@ -143,6 +143,24 @@ func update_platform_visualization_properties(element_id: String, platform_data:
 
 		# Update motion path visualization
 		_update_motion_path_visualization(element_id, platform_data)
+		
+		# Update position based on current time
+		var motion_path_data: Dictionary = platform_data.get("motion_path", {})
+		var waypoints: Array = motion_path_data.get("waypoints", [])
+		var interp_type: String = motion_path_data.get("interpolation", "static")
+
+		if waypoints.is_empty():
+			platform_node.position = Vector3.ZERO
+		else:
+			var new_pos := Vector3.ZERO
+			match interp_type:
+				"static": new_pos = _get_pos_from_waypoint(waypoints[0])
+				"linear": new_pos = _get_position_linear(SimData.simulation_time, waypoints)
+				"cubic":
+					var dd := _get_or_calculate_cubic_dd(element_id, waypoints)
+					if not dd.is_empty():
+						new_pos = _get_position_cubic(SimData.simulation_time, waypoints, dd)
+			platform_node.position = new_pos
 	else:
 		printerr("World3DView: Platform 3D node '", element_id, "' not found for update.")
 

@@ -11,10 +11,10 @@ extends Control
 @onready var toggle_left_sidebar_button: Button = %toggle_left_sidebar_button
 @onready var toggle_right_sidebar_button: Button = %toggle_right_sidebar_button
 @onready var world_3d_view: World3DView = %world_3d_view
-@onready var rewind_button: Button = %rewind_button
-@onready var play_button: Button = %play_button
-@onready var pause_button: Button = %pause_button
-@onready var step_button: Button = %step_button
+@onready var reset_button: Button = %reset_button
+@onready var step_back_button: Button = %step_back_button
+@onready var play_pause_button: Button = %play_pause_button
+@onready var step_forward_button: Button = %step_forward_button
 @onready var time_label: Label = %time_label
 @onready var frame_scene_button: Button = %frame_scene_button
 
@@ -22,10 +22,10 @@ extends Control
 # --- GODOT VIRTUAL METHODS ---
 func _ready() -> void:
 	# Connect local UI interaction signals
-	rewind_button.pressed.connect(SimData.rewind)
-	play_button.pressed.connect(SimData.play)
-	pause_button.pressed.connect(SimData.pause)
-	step_button.pressed.connect(SimData.step)
+	reset_button.pressed.connect(SimData.rewind)
+	step_back_button.pressed.connect(SimData.step_back)
+	play_pause_button.pressed.connect(SimData.toggle_play_pause)
+	step_forward_button.pressed.connect(SimData.step)
 	toggle_left_sidebar_button.pressed.connect(_on_toggle_left_sidebar_button_pressed)
 	toggle_right_sidebar_button.pressed.connect(_on_toggle_right_sidebar_button_pressed)
 	frame_scene_button.pressed.connect(world_3d_view.frame_scene_contents)
@@ -59,8 +59,7 @@ func _on_camera_focus_requested(element_id: String) -> void:
 
 
 func _on_playback_state_changed(is_playing: bool) -> void:
-	play_button.disabled = is_playing
-	pause_button.disabled = not is_playing
+	play_pause_button.text = "Pause" if is_playing else "Play"
 
 
 func _on_simulation_time_updated(new_time: float) -> void:
@@ -92,4 +91,4 @@ func _update_toggle_button_text(button_node: Button, is_opening: bool, is_left: 
 	if is_left:
 		button_node.text = "<" if is_opening else ">"
 	else:
-		button_node.text = ">" if is_opening else "<"	
+		button_node.text = ">" if is_opening else "<"

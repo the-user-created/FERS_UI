@@ -157,6 +157,13 @@ func set_selected_element_id(element_id: String) -> void:
 
 
 # --- Public API for Playback Control ---
+func toggle_play_pause() -> void:
+	if is_playing:
+		pause()
+	else:
+		play()
+
+
 func play() -> void:
 	var end_time: float = get_element_data("sim_params").get("end_time", 1.0)
 	# If playback is at the end, rewind before playing.
@@ -183,6 +190,13 @@ func step() -> void:
 	pause()
 	var end_time: float = get_element_data("sim_params").get("end_time", 1.0)
 	simulation_time = min(simulation_time + (1.0 / 60.0), end_time)
+	emit_signal("simulation_time_updated", simulation_time)
+
+
+func step_back() -> void:
+	pause()
+	var start_time: float = get_element_data("sim_params").get("start_time", 0.0)
+	simulation_time = max(simulation_time - (1.0 / 60.0), start_time)
 	emit_signal("simulation_time_updated", simulation_time)
 
 
