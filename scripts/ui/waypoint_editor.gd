@@ -73,14 +73,14 @@ func _create_spinbox(container: VBoxContainer, label_text: String, value: float,
 	num_edit.text = str(value)
 	num_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	var on_value_commit = func():
+	var commit_value = func(text_to_commit: String):
 		# Don't update the data if the input is incomplete (e.g., empty or just "-").
-		if num_edit.text.is_empty() or num_edit.text == "-":
+		if text_to_commit.is_empty() or text_to_commit == "-":
 			return
-		_on_waypoint_value_changed(num_edit.text.to_float(), index, key)
+		_on_waypoint_value_changed(text_to_commit.to_float(), index, key)
 
-	num_edit.text_submitted.connect(on_value_commit)
-	num_edit.focus_exited.connect(on_value_commit)
+	num_edit.text_submitted.connect(commit_value)
+	num_edit.focus_exited.connect(func(): commit_value.call(num_edit.text))
 
 	hbox.add_child(num_edit)
 	container.add_child(hbox)

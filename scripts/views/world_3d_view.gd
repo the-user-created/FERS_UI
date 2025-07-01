@@ -67,12 +67,16 @@ func _on_simulation_data_property_preview_updated(element_id: String, property_k
 	# This handles live preview updates without a full data object.
 	if property_key == "color":
 		var platform_node := world_3d_root.get_node_or_null(element_id) as Node3D
-		if platform_node:
+		if platform_node and new_value is Color:
 			var sphere := platform_node.get_node_or_null("Sphere") as CSGSphere3D
 			if sphere:
 				var mat := sphere.material as StandardMaterial3D
-				if mat and new_value is Color:
+				if mat:
 					mat.albedo_color = new_value
+			
+			var label := platform_node.get_node_or_null("NameLabel") as Label3D
+			if label:
+				label.modulate = new_value
 
 
 # --- Core Visualization Logic ---
@@ -109,6 +113,8 @@ func add_platform_visualization(platform_data: Dictionary) -> void:
 	platform_label.name = "NameLabel"
 	platform_label.text = platform_data.get("name", "Unnamed")
 	platform_label.font_size = 64
+	platform_label.outline_size = 8
+	platform_label.outline_modulate = Color.BLACK
 	platform_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	platform_label.position.y = 1.0 # Position it above the sphere
 	platform_3d_vis_root.add_child(platform_label)
@@ -121,17 +127,19 @@ func add_platform_visualization(platform_data: Dictionary) -> void:
 func update_platform_visualization_properties(element_id: String, platform_data: Dictionary) -> void:
 	var platform_node: Area3D = world_3d_root.get_node_or_null(element_id) as Area3D
 	if platform_node:
+		var platform_color = platform_data.get("color", Color.WHITE)
 		# Update color
 		var sphere := platform_node.get_node_or_null("Sphere") as CSGSphere3D
 		if sphere:
 			var mat := sphere.material as StandardMaterial3D
 			if mat:
-				mat.albedo_color = platform_data.get("color", Color.WHITE)
+				mat.albedo_color = platform_color
 
 		# Update name label
 		var label := platform_node.get_node_or_null("NameLabel") as Label3D
 		if label:
 			label.text = platform_data.get("name", "Unnamed")
+			label.modulate = platform_color
 
 		# Update motion path visualization
 		_update_motion_path_visualization(element_id, platform_data)
@@ -257,6 +265,7 @@ func _update_motion_path_visualization(element_id: String, platform_data: Dictio
 		var wp_pos: Vector3 = _get_pos_from_waypoint(wp_data)
 		var label := Label3D.new()
 		label.text = "%ss\n(%.1f, %.1f, %.1f)" % [wp_data.get("time", 0.0), wp_data.get("x", 0.0), wp_data.get("y", 0.0), wp_data.get("altitude", 0.0)]
+		label.modulate = platform_data.get("color", Color.WHITE)
 		label.font_size = 48
 		label.outline_size = 6
 		label.outline_modulate = Color.BLACK
@@ -492,32 +501,55 @@ func _process(delta: float) -> void:
 
 func frame_scene_contents() -> void:
 	var platform_nodes: Array[Area3D]
+	var path_nodes: Array[Node3D]
 	for child in world_3d_root.get_children():
 		if child.name.begins_with("platform_") and child is Area3D:
 			platform_nodes.append(child)
+		elif child.name.begins_with("MotionPath_") and child is Node3D:
+			path_nodes.append(child)
 
-	if platform_nodes.is_empty():
-		# Reset to a default view if no platforms exist
+	if platform_nodes.is_empty() and path_nodes.is_empty():
+		# Reset to a default view if nothing exists
 		var tween_reset := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		tween_reset.tween_property(self, "_target_position", Vector3.ZERO, 0.5)
 		tween_reset.parallel().tween_property(self, "_camera_distance", 12.0, 0.5)
 		return
 
-	if platform_nodes.size() == 1:
-		focus_on_element(platform_nodes[0].name)
-		return
+	# Calculate the AABB that encloses all platforms and their motion paths.
+	var aabb: AABB
+	var has_content := false
 
-	# Calculate the AABB that encloses all platforms.
-	var aabb := AABB(platform_nodes[0].position, Vector3.ZERO)
-	for i in range(1, platform_nodes.size()):
-		aabb = aabb.expand(platform_nodes[i].position)
+	for p_node in platform_nodes:
+		if not has_content:
+			aabb = AABB(p_node.position, Vector3.ZERO)
+			has_content = true
+		else:
+			aabb = aabb.expand(p_node.position)
+
+	for path_node in path_nodes:
+		for path_child in path_node.get_children():
+			if path_child is MeshInstance3D:
+				var child_aabb = path_child.get_aabb()
+				if not has_content:
+					aabb = child_aabb
+					has_content = true
+				else:
+					aabb = aabb.merge(child_aabb)
+
+	if not has_content: return # Nothing to frame
 
 	var new_target_pos = aabb.get_center()
 
 	# Use a bounding sphere approach for a robust distance calculation.
 	var bounding_sphere_radius = aabb.size.length() / 2.0
-	if bounding_sphere_radius < 0.01: # Avoid division by zero if all points are identical.
-		return focus_on_element(platform_nodes[0].name)
+	if bounding_sphere_radius < 0.01: # Scene content is essentially a single point.
+		if not platform_nodes.is_empty():
+			return focus_on_element(platform_nodes[0].name)
+		else:
+			var tween_focus := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			tween_focus.tween_property(self, "_target_position", new_target_pos, 0.5)
+			tween_focus.parallel().tween_property(self, "_camera_distance", 10.0, 0.5)
+			return
 
 	# Get the tightest FOV (vertical or horizontal) to ensure the AABB fits.
 	var v_fov_rad = deg_to_rad(camera.fov)
