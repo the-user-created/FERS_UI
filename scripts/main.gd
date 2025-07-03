@@ -19,6 +19,7 @@ extends Control
 @onready var frame_scene_button: Button = %frame_scene_button
 @onready var file_menu_button: MenuButton = %file_menu_button
 
+var import_file_dialog: FileDialog
 var export_file_dialog: FileDialog
 
 # --- GODOT VIRTUAL METHODS ---
@@ -33,7 +34,14 @@ func _ready() -> void:
 	frame_scene_button.pressed.connect(world_3d_view.frame_scene_contents)
 	right_sidebar.camera_focus_requested.connect(_on_camera_focus_requested)
 	
-	# Setup File menu and export dialog
+	# Setup File menu and dialogs
+	import_file_dialog = FileDialog.new()
+	import_file_dialog.title = "Import Simulation from XML"
+	import_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	import_file_dialog.add_filter("*.xml", "XML Simulation File")
+	import_file_dialog.file_selected.connect(_on_import_file_selected)
+	add_child(import_file_dialog)
+
 	export_file_dialog = FileDialog.new()
 	export_file_dialog.title = "Export Simulation to XML"
 	export_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
@@ -41,6 +49,8 @@ func _ready() -> void:
 	export_file_dialog.file_selected.connect(_on_export_file_selected)
 	add_child(export_file_dialog)
 	file_menu_button.get_popup().add_item("Export to XML...", 0)
+	file_menu_button.get_popup().add_separator()
+	file_menu_button.get_popup().add_item("Import from XML...", 1)
 	file_menu_button.get_popup().id_pressed.connect(_on_file_menu_id_pressed)
 
 	# Set initial UI state
@@ -84,6 +94,20 @@ func _on_file_menu_id_pressed(id: int) -> void:
 			var sim_name = SimData.get_element_data("sim_name").get("name_value", "simulation")
 			export_file_dialog.current_file = "%s.xml" % sim_name.to_snake_case()
 			export_file_dialog.popup_centered()
+		1: # Import from XML
+			import_file_dialog.popup_centered()
+
+
+func _on_import_file_selected(path: String) -> void:
+	if not FileAccess.file_exists(path):
+		printerr("Import failed: File does not exist at path: ", path)
+		return
+		
+	var file := FileAccess.open(path, FileAccess.READ)
+	var content := file.get_as_text()
+	file.close()
+	
+	SimData.import_from_xml(content)
 
 
 func _on_export_file_selected(path: String) -> void:

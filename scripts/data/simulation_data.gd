@@ -216,6 +216,181 @@ func get_elements_by_type(element_type: String) -> Array[Dictionary]:
 	return results
 
 
+# --- XML IMPORT LOGIC ---
+func import_from_xml(xml_content: String) -> void:
+	_clear_simulation_data()
+
+	var parser := XMLParser.new()
+	var error := parser.open_buffer(xml_content.to_utf8_buffer())
+	if error != OK:
+		printerr("XML Import Error: Failed to open XML buffer. Error code: ", error)
+		return
+
+	var name_to_id_map := {}
+
+	while parser.read() == OK:
+		if parser.get_node_type() == XMLParser.NODE_ELEMENT:
+			var node_name := parser.get_node_name()
+			match node_name:
+				"simulation":
+					update_element_property("sim_name", "name_value", parser.get_named_attribute_value_safe("name"))
+				"parameters":
+					_parse_parameters(parser)
+				"pulse":
+					_parse_pulse(parser, name_to_id_map)
+				"timing":
+					_parse_timing(parser, name_to_id_map)
+				"antenna":
+					_parse_antenna(parser, name_to_id_map)
+				"platform":
+					_parse_platform(parser, name_to_id_map)
+
+
+func _clear_simulation_data() -> void:
+	var deletable_ids := []
+	for id in _simulation_elements_data:
+		if _simulation_elements_data[id].type in ["platform", "pulse", "timing_source", "antenna"]:
+			deletable_ids.append(id)
+
+	for id in deletable_ids:
+		_simulation_elements_data.erase(id)
+		emit_signal("element_removed", id)
+
+	for key in _id_counters:
+		_id_counters[key] = 0
+
+	_ready() # Reset global params
+	emit_signal("element_updated", "sim_name", get_element_data("sim_name"))
+	emit_signal("element_updated", "sim_params", get_element_data("sim_params"))
+	set_selected_element_id("sim_name")
+
+
+func _parse_parameters(parser: XMLParser) -> void:
+	var data := get_element_data("sim_params")
+	while parser.read() == OK:
+		var node_type = parser.get_node_type()
+		if node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "parameters": break
+		if node_type == XMLParser.NODE_ELEMENT:
+			var key := parser.get_node_name()
+			parser.read() # Move to text node
+			var value := parser.get_node_data().strip_edges().to_float()
+			match key:
+				"starttime": data.start_time = value
+				"endtime": data.end_time = value
+				"rate": data.sampling_rate = value
+	_simulation_elements_data["sim_params"] = data
+	emit_signal("element_updated", "sim_params", data)
+
+
+func _parse_pulse(parser: XMLParser, name_to_id_map: Dictionary) -> void:
+	create_new_element("pulse")
+	var new_id := "pulse_%d" % _id_counters.pulse
+	var data := get_element_data(new_id)
+	data.name = parser.get_named_attribute_value_safe("name")
+	data.pulse_type_actual = parser.get_named_attribute_value_safe("type")
+	if data.pulse_type_actual == "file":
+		data.pulse_filename = parser.get_named_attribute_value_safe("filename")
+	name_to_id_map[data.name] = new_id
+	
+	while parser.read() == OK:
+		var node_type = parser.get_node_type()
+		if node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "pulse": break
+		if node_type == XMLParser.NODE_ELEMENT and not parser.is_empty():
+			var key = parser.get_node_name()
+			parser.read() # Move to the text content
+			if parser.get_node_type() == XMLParser.NODE_TEXT:
+				var value := parser.get_node_data().strip_edges().to_float()
+				match key:
+					"power": data.power = value
+					"carrier": data.carrier_frequency = value
+	_simulation_elements_data[new_id] = data
+	emit_signal("element_updated", new_id, data)
+
+
+func _parse_timing(parser: XMLParser, name_to_id_map: Dictionary) -> void:
+	create_new_element("timing_source")
+	var new_id := "timing_source_%d" % _id_counters.timing_source
+	var data := get_element_data(new_id)
+	data.name = parser.get_named_attribute_value_safe("name")
+	name_to_id_map[data.name] = new_id
+	while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == "frequency"):
+		pass # Seek to the frequency element
+	data.frequency = parser.get_node_data().strip_edges().to_float()
+	_simulation_elements_data[new_id] = data
+	emit_signal("element_updated", new_id, data)
+
+
+func _parse_antenna(parser: XMLParser, name_to_id_map: Dictionary) -> void:
+	create_new_element("antenna")
+	var new_id := "antenna_%d" % _id_counters.antenna
+	var data := get_element_data(new_id)
+	data.name = parser.get_named_attribute_value_safe("name")
+	data.antenna_pattern_actual = parser.get_named_attribute_value_safe("pattern")
+	if data.antenna_pattern_actual in ["xml", "file"]:
+		data.filename = parser.get_named_attribute_value_safe("filename")
+	name_to_id_map[data.name] = new_id
+	_simulation_elements_data[new_id] = data
+	emit_signal("element_updated", new_id, data)
+
+
+func _parse_platform(parser: XMLParser, name_to_id_map: Dictionary) -> void:
+	create_new_element("platform")
+	var new_id := "platform_%d" % _id_counters.platform
+	var data := get_element_data(new_id)
+	data.name = parser.get_named_attribute_value_safe("name")
+	name_to_id_map[data.name] = new_id
+	
+	while parser.read() == OK:
+		var node_type := parser.get_node_type()
+		if node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "platform": break
+		if node_type == XMLParser.NODE_ELEMENT:
+			match parser.get_node_name():
+				"motionpath":
+					data.motion_path.interpolation = parser.get_named_attribute_value_safe("interpolation")
+					var wps = []
+					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "motionpath"):
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == "positionwaypoint":
+							var wp = {"x":0.0, "y":0.0, "altitude":0.0, "time":0.0}
+							while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "positionwaypoint"):
+								if parser.get_node_type() == XMLParser.NODE_ELEMENT:
+									var key = parser.get_node_name()
+									parser.read()
+									wp[key] = parser.get_node_data().strip_edges().to_float()
+							wps.append(wp)
+					data.motion_path.waypoints = wps
+				"fixedrotation":
+					data.rotation_model.type = "fixed"
+					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "fixedrotation"):
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
+							var key = {"startazimuth":"start_azimuth", "startelevation":"start_elevation", "azimuthrate":"azimuth_rate", "elevationrate":"elevation_rate"}[parser.get_node_name()]
+							parser.read()
+							data.rotation_model.fixed_rotation_data[key] = parser.get_node_data().strip_edges().to_float()
+				"monostatic":
+					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "monostatic")
+					data.monostatic_radar_type = parser.get_named_attribute_value_safe("type")
+					data.monostatic_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"))
+					data.monostatic_pulse_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("pulse"))
+					data.monostatic_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"))
+					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "monostatic"):
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
+							var key = {"window_skip":"monostatic_window_skip", "window_length":"monostatic_window_length", "prf":"monostatic_prf", "noise_temp":"monostatic_noise_temp"}[parser.get_node_name()]
+							parser.read()
+							data[key] = parser.get_node_data().strip_edges().to_float()
+				"target":
+					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "target")
+					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "target"):
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
+							if parser.get_node_name() == "rcs":
+								data.target_rcs_type_actual = parser.get_named_attribute_value_safe("type")
+								if data.target_rcs_type_actual == "file":
+									data.target_rcs_filename = parser.get_named_attribute_value_safe("filename")
+								else: # isotropic
+									parser.read(); parser.read()
+									data.target_rcs_value = parser.get_node_data().strip_edges().to_float()
+	_simulation_elements_data[new_id] = data
+	emit_signal("element_updated", new_id, data)
+
+
 # --- XML EXPORT LOGIC ---
 func export_as_xml() -> String:
 	_build_id_to_name_map()
@@ -291,7 +466,7 @@ func _build_antenna_xml(data: Dictionary, indent: String) -> String:
 
 
 func _build_platform_xml(data: Dictionary, indent: String) -> String:
-	var parts: Array
+	var parts: Array[String]
 	parts.append(indent + '<platform name="%s">' % data.get("name", "unnamed"))
 	parts.append(_build_motion_path_xml(data.get("motion_path", {}), indent + "    "))
 	parts.append(_build_rotation_xml(data.get("rotation_model", {}), indent + "    "))
@@ -315,7 +490,7 @@ func _build_motion_path_xml(data: Dictionary, indent: String) -> String:
 
 
 func _build_rotation_xml(data: Dictionary, indent: String) -> String:
-	var parts: Array
+	var parts: Array[String]
 	if data.get("type", "fixed") == "fixed":
 		var fixed = data.get("fixed_rotation_data", {})
 		parts.append(indent + "<fixedrotation>")
