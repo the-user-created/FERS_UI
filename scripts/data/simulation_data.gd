@@ -25,6 +25,8 @@ var _selected_element_id: String = ""
 var simulation_time: float = 0.0
 var is_playing: bool = false
 
+var _id_to_name_map: Dictionary = {}
+
 var _id_counters: Dictionary = {
 	"platform": 0,
 	"pulse": 0,
@@ -212,3 +214,182 @@ func get_elements_by_type(element_type: String) -> Array[Dictionary]:
 		if item_data.has("type") and item_data.type == element_type:
 			results.append(item_data)
 	return results
+
+
+# --- XML EXPORT LOGIC ---
+func export_as_xml() -> String:
+	_build_id_to_name_map()
+
+	var sim_name: String = get_element_data("sim_name").get("name_value", "FERS_Simulation")
+	var sim_params: Dictionary = get_element_data("sim_params")
+	var pulses: Array[Dictionary] = get_elements_by_type("pulse")
+	var timings: Array[Dictionary] = get_elements_by_type("timing_source")
+	var antennas: Array[Dictionary] = get_elements_by_type("antenna")
+	var platforms: Array[Dictionary] = get_elements_by_type("platform")
+
+	var xml_parts: Array
+	xml_parts.append('<?xml version="1.0" encoding="UTF-8"?>')
+	xml_parts.append('<simulation name="%s">' % sim_name)
+	
+	xml_parts.append(_build_parameters_xml(sim_params, "    "))
+	for p in pulses: xml_parts.append(_build_pulse_xml(p, "    "))
+	for t in timings: xml_parts.append(_build_timing_xml(t, "    "))
+	for a in antennas: xml_parts.append(_build_antenna_xml(a, "    "))
+	for p in platforms: xml_parts.append(_build_platform_xml(p, "    "))
+	
+	xml_parts.append('</simulation>')
+	return "\n".join(xml_parts)
+
+
+func _build_id_to_name_map() -> void:
+	_id_to_name_map.clear()
+	for key in _simulation_elements_data:
+		var element_data: Dictionary = _simulation_elements_data[key]
+		var name: String = element_data.get("name", "")
+		if not name.is_empty():
+			_id_to_name_map[key] = name
+
+
+func _get_name_from_id(element_id: String) -> String:
+	return _id_to_name_map.get(element_id, "")
+
+
+func _build_parameters_xml(data: Dictionary, indent: String) -> String:
+	var parts: Array
+	parts.append(indent + "<parameters>")
+	parts.append(indent + "    <starttime>%s</starttime>" % data.get("start_time", 0.0))
+	parts.append(indent + "    <endtime>%s</endtime>" % data.get("end_time", 1.0))
+	parts.append(indent + "    <rate>%s</rate>" % data.get("sampling_rate", 1e6))
+	parts.append(indent + "</parameters>")
+	return "\n".join(parts)
+
+
+func _build_pulse_xml(data: Dictionary, indent: String) -> String:
+	var parts: Array
+	var pulse_type: String = data.get("pulse_type_actual", "file")
+	var filename_attr := ' filename="%s"' % data.get("pulse_filename", "") if pulse_type == "file" else ""
+	
+	parts.append(indent + '<pulse name="%s" type="%s"%s>' % [data.get("name", "unnamed"), pulse_type, filename_attr])
+	parts.append(indent + "    <power>%s</power>" % data.get("power", 0.0))
+	parts.append(indent + "    <carrier>%s</carrier>" % data.get("carrier_frequency", 0.0))
+	parts.append(indent + '</pulse>')
+	return "\n".join(parts)
+
+
+func _build_timing_xml(data: Dictionary, indent: String) -> String:
+	var parts: Array
+	parts.append(indent + '<timing name="%s">' % data.get("name", "unnamed"))
+	parts.append(indent + "    <frequency>%s</frequency>" % data.get("frequency", 1e7))
+	parts.append(indent + '</timing>')
+	return "\n".join(parts)
+
+
+func _build_antenna_xml(data: Dictionary, indent: String) -> String:
+	var pattern: String = data.get("antenna_pattern_actual", "isotropic")
+	var filename_attr := ' filename="%s"' % data.get("filename", "") if pattern in ["xml", "file"] else ""
+	return indent + '<antenna name="%s" pattern="%s"%s/>' % [data.get("name", "unnamed"), pattern, filename_attr]
+
+
+func _build_platform_xml(data: Dictionary, indent: String) -> String:
+	var parts: Array
+	parts.append(indent + '<platform name="%s">' % data.get("name", "unnamed"))
+	parts.append(_build_motion_path_xml(data.get("motion_path", {}), indent + "    "))
+	parts.append(_build_rotation_xml(data.get("rotation_model", {}), indent + "    "))
+	parts.append(_build_platform_subtype_xml(data, indent + "    "))
+	parts.append(indent + '</platform>')
+	return "\n".join(parts)
+
+
+func _build_motion_path_xml(data: Dictionary, indent: String) -> String:
+	var parts: Array
+	parts.append(indent + '<motionpath interpolation="%s">' % data.get("interpolation", "static"))
+	for wp in data.get("waypoints", []):
+		parts.append(indent + "    <positionwaypoint>")
+		parts.append(indent + "        <x>%s</x>" % wp.get("x", 0.0))
+		parts.append(indent + "        <y>%s</y>" % wp.get("y", 0.0))
+		parts.append(indent + "        <altitude>%s</altitude>" % wp.get("altitude", 0.0))
+		parts.append(indent + "        <time>%s</time>" % wp.get("time", 0.0))
+		parts.append(indent + "    </positionwaypoint>")
+	parts.append(indent + '</motionpath>')
+	return "\n".join(parts)
+
+
+func _build_rotation_xml(data: Dictionary, indent: String) -> String:
+	var parts: Array
+	if data.get("type", "fixed") == "fixed":
+		var fixed = data.get("fixed_rotation_data", {})
+		parts.append(indent + "<fixedrotation>")
+		parts.append(indent + "    <startazimuth>%s</startazimuth>" % fixed.get("start_azimuth", 0.0))
+		parts.append(indent + "    <startelevation>%s</startelevation>" % fixed.get("start_elevation", 0.0))
+		parts.append(indent + "    <azimuthrate>%s</azimuthrate>" % fixed.get("azimuth_rate", 0.0))
+		parts.append(indent + "    <elevationrate>%s</elevationrate>" % fixed.get("elevation_rate", 0.0))
+		parts.append(indent + "</fixedrotation>")
+	else: # path
+		var path = data.get("rotation_path_data", {})
+		parts.append(indent + '<rotationpath interpolation="%s">' % path.get("interpolation", "static"))
+		for wp in path.get("waypoints", []):
+			parts.append(indent + "    <rotationwaypoint>")
+			parts.append(indent + "        <azimuth>%s</azimuth>" % wp.get("azimuth", 0.0))
+			parts.append(indent + "        <elevation>%s</elevation>" % wp.get("elevation", 0.0))
+			parts.append(indent + "        <time>%s</time>" % wp.get("time", 0.0))
+			parts.append(indent + "    </rotationwaypoint>")
+		parts.append(indent + '</rotationpath>')
+	return "\n".join(parts)
+
+
+func _build_platform_subtype_xml(data: Dictionary, indent: String) -> String:
+	var subtype: String = data.get("platform_type_actual", "target")
+	var inst_name: String = data.get("name", "unnamed") + "_inst"
+	var parts: Array
+
+	match subtype:
+		"monostatic":
+			var ant_name = _get_name_from_id(data.get("monostatic_antenna_id_ref", ""))
+			var pul_name = _get_name_from_id(data.get("monostatic_pulse_id_ref", ""))
+			var tim_name = _get_name_from_id(data.get("monostatic_timing_id_ref", ""))
+			var attrs = 'name="%s" type="%s" antenna="%s" pulse="%s" timing="%s"' % [inst_name, data.get("monostatic_radar_type"), ant_name, pul_name, tim_name]
+			if data.get("monostatic_nodirect", false): attrs += ' nodirect="true"'
+			if data.get("monostatic_nopropagationloss", false): attrs += ' nopropagationloss="true"'
+			parts.append(indent + "<monostatic %s>" % attrs)
+			parts.append(indent + "    <window_skip>%s</window_skip>" % data.get("monostatic_window_skip"))
+			parts.append(indent + "    <window_length>%s</window_length>" % data.get("monostatic_window_length"))
+			parts.append(indent + "    <prf>%s</prf>" % data.get("monostatic_prf"))
+			parts.append(indent + "    <noise_temp>%s</noise_temp>" % data.get("monostatic_noise_temp"))
+			parts.append(indent + "</monostatic>")
+		"transmitter":
+			var ant_name = _get_name_from_id(data.get("transmitter_antenna_id_ref", ""))
+			var pul_name = _get_name_from_id(data.get("transmitter_pulse_id_ref", ""))
+			var tim_name = _get_name_from_id(data.get("transmitter_timing_id_ref", ""))
+			var attrs = 'name="%s" type="%s" antenna="%s" pulse="%s" timing="%s"' % [inst_name, data.get("transmitter_type_actual"), ant_name, pul_name, tim_name]
+			parts.append(indent + '<transmitter %s>' % attrs)
+			parts.append(indent + "    <prf>%s</prf>" % data.get("transmitter_prf"))
+			parts.append(indent + "</transmitter>")
+		"receiver":
+			var ant_name = _get_name_from_id(data.get("receiver_antenna_id_ref", ""))
+			var tim_name = _get_name_from_id(data.get("receiver_timing_id_ref", ""))
+			var attrs = 'name="%s" antenna="%s" timing="%s"' % [inst_name, ant_name, tim_name]
+			if data.get("receiver_nodirect", false): attrs += ' nodirect="true"'
+			if data.get("receiver_nopropagationloss", false): attrs += ' nopropagationloss="true"'
+			parts.append(indent + "<receiver %s>" % attrs)
+			parts.append(indent + "    <window_skip>%s</window_skip>" % data.get("receiver_window_skip"))
+			parts.append(indent + "    <window_length>%s</window_length>" % data.get("receiver_window_length"))
+			parts.append(indent + "    <prf>%s</prf>" % data.get("receiver_prf"))
+			parts.append(indent + "    <noise_temp>%s</noise_temp>" % data.get("receiver_noise_temp"))
+			parts.append(indent + "</receiver>")
+		"target":
+			parts.append(indent + '<target name="%s">' % inst_name)
+			var rcs_type = data.get("target_rcs_type_actual", "isotropic")
+			var filename_attr = ' filename="%s"' % data.get("target_rcs_filename") if rcs_type == "file" else ""
+			parts.append(indent + '    <rcs type="%s"%s>' % [rcs_type, filename_attr])
+			if rcs_type == "isotropic":
+				parts.append(indent + '        <value>%s</value>' % data.get("target_rcs_value"))
+			parts.append(indent + '    </rcs>')
+			var model_type = data.get("target_rcs_fluctuation_model_type", "constant")
+			if model_type != "constant":
+				parts.append(indent + '    <model type="%s">' % model_type)
+				if model_type != "constant":
+					parts.append(indent + '        <k>%s</k>' % data.get("target_rcs_fluctuation_k"))
+				parts.append(indent + '    </model>')
+			parts.append(indent + '</target>')
+
+	return "\n".join(parts)

@@ -17,7 +17,9 @@ extends Control
 @onready var step_forward_button: Button = %step_forward_button
 @onready var time_label: Label = %time_label
 @onready var frame_scene_button: Button = %frame_scene_button
+@onready var file_menu_button: MenuButton = %file_menu_button
 
+var export_file_dialog: FileDialog
 
 # --- GODOT VIRTUAL METHODS ---
 func _ready() -> void:
@@ -30,6 +32,16 @@ func _ready() -> void:
 	toggle_right_sidebar_button.pressed.connect(_on_toggle_right_sidebar_button_pressed)
 	frame_scene_button.pressed.connect(world_3d_view.frame_scene_contents)
 	right_sidebar.camera_focus_requested.connect(_on_camera_focus_requested)
+	
+	# Setup File menu and export dialog
+	export_file_dialog = FileDialog.new()
+	export_file_dialog.title = "Export Simulation to XML"
+	export_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	export_file_dialog.add_filter("*.xml", "XML Simulation File")
+	export_file_dialog.file_selected.connect(_on_export_file_selected)
+	add_child(export_file_dialog)
+	file_menu_button.get_popup().add_item("Export to XML...", 0)
+	file_menu_button.get_popup().id_pressed.connect(_on_file_menu_id_pressed)
 
 	# Set initial UI state
 	toggle_left_sidebar_button.text = "<" if left_sidebar.visible else ">"
@@ -64,6 +76,24 @@ func _on_playback_state_changed(is_playing: bool) -> void:
 
 func _on_simulation_time_updated(new_time: float) -> void:
 	time_label.text = "Time: %.2fs" % new_time
+
+
+func _on_file_menu_id_pressed(id: int) -> void:
+	match id:
+		0: # Export to XML
+			var sim_name = SimData.get_element_data("sim_name").get("name_value", "simulation")
+			export_file_dialog.current_file = "%s.xml" % sim_name.to_snake_case()
+			export_file_dialog.popup_centered()
+
+
+func _on_export_file_selected(path: String) -> void:
+	var xml_string: String = SimData.export_as_xml()
+	if xml_string.is_empty():
+		printerr("Failed to generate XML string.")
+		return
+
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(xml_string)
 
 
 # --- PRIVATE HELPER METHODS ---
