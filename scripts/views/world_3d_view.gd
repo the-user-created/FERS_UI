@@ -78,6 +78,10 @@ func _on_simulation_data_property_preview_updated(element_id: String, property_k
 			if label:
 				label.modulate = new_value
 
+			var location_label := platform_node.get_node_or_null("LocationLabel") as Label3D
+			if location_label:
+				location_label.modulate = new_value
+
 
 # --- Core Visualization Logic ---
 func add_platform_visualization(platform_data: Dictionary) -> void:
@@ -119,6 +123,17 @@ func add_platform_visualization(platform_data: Dictionary) -> void:
 	platform_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	platform_label.position.y = 1.0 # Position it above the sphere
 	platform_3d_vis_root.add_child(platform_label)
+
+	# The location label
+	var location_label = Label3D.new()
+	location_label.name = "LocationLabel"
+	location_label.text = "Pos: (0.0, 0.0, 0.0)"
+	location_label.font_size = 48
+	location_label.outline_size = 6
+	location_label.outline_modulate = Color.BLACK
+	location_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	location_label.position.y = -1.0 # Position it below the sphere
+	platform_3d_vis_root.add_child(location_label)
 
 	world_3d_root.add_child(platform_3d_vis_root)
 	update_platform_visualization_properties(element_id, platform_data)
@@ -162,6 +177,11 @@ func update_platform_visualization_properties(element_id: String, platform_data:
 			label.modulate = platform_color
 			# Position the label just above the sphere's new radius
 			label.position.y = new_radius + 0.5
+		
+		var location_label := platform_node.get_node_or_null("LocationLabel") as Label3D
+		if location_label:
+			location_label.modulate = platform_color
+			location_label.position.y = -new_radius - 0.5
 
 		# Update motion path visualization
 		_update_motion_path_visualization(element_id, platform_data)
@@ -183,6 +203,10 @@ func update_platform_visualization_properties(element_id: String, platform_data:
 					if not dd.is_empty():
 						new_pos = _get_position_cubic(SimData.simulation_time, waypoints, dd)
 			platform_node.position = new_pos
+		
+		if location_label:
+			# Display position in FERS coordinates (X, Y-Plane, Altitude) which map to Godot's (X, Z, Y)
+			location_label.text = "Pos: (%.1f, %.1f, %.1f)" % [platform_node.position.x, platform_node.position.z, platform_node.position.y]
 	else:
 		printerr("World3DView: Platform 3D node '", element_id, "' not found for update.")
 
@@ -225,6 +249,11 @@ func _update_all_platform_positions(time: float) -> void:
 					if not dd.is_empty():
 						new_pos = _get_position_cubic(time, waypoints, dd) # Fallback to linear is handled inside 
 			child.position = new_pos
+
+			var location_label: Label3D = child.get_node_or_null("LocationLabel")
+			if location_label:
+				# Display position in FERS coordinates (X, Y-Plane, Altitude) which map to Godot's (X, Z, Y)
+				location_label.text = "Pos: (%.1f, %.1f, %.1f)" % [new_pos.x, new_pos.z, new_pos.y]
 
 
 func _on_platform_input_event(_camera: Camera3D, event: InputEvent, _pos: Vector3, _normal: Vector3, _shape_idx: int, element_id: String):
@@ -445,6 +474,10 @@ func _update_all_labels_scale() -> void:
 			var label: Label3D = node.get_node_or_null("NameLabel")
 			if label:
 				label.pixel_size = new_pixel_size
+			var location_label: Label3D = node.get_node_or_null("LocationLabel")
+			if location_label:
+				# Location labels have smaller font size (48 vs 64)
+				location_label.pixel_size = new_pixel_size * (48.0 / 64.0)
 		# Scale motion path waypoint labels
 		elif node is Node3D and node.name.begins_with("MotionPath_"):
 			for path_child in node.get_children():
