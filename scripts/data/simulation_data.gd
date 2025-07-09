@@ -357,6 +357,7 @@ func _parse_platform(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 									parser.read()
 									wp[key] = parser.get_node_data().strip_edges().to_float()
 							wps.append(wp)
+					wps.sort_custom(func(a, b): return a.get("time", 0.0) < b.get("time", 0.0))
 					data.motion_path.waypoints = wps
 				"fixedrotation":
 					data.rotation_model.type = "fixed"
@@ -420,9 +421,9 @@ func _build_id_to_name_map() -> void:
 	_id_to_name_map.clear()
 	for key in _simulation_elements_data:
 		var element_data: Dictionary = _simulation_elements_data[key]
-		var name: String = element_data.get("name", "")
-		if not name.is_empty():
-			_id_to_name_map[key] = name
+		var element_name: String = element_data.get("name", "")
+		if not element_name.is_empty():
+			_id_to_name_map[key] = element_name
 
 
 func _get_name_from_id(element_id: String) -> String:

@@ -107,4 +107,5 @@ func _on_remove_button_pressed(index: int) -> void:
 
 
 func _on_confirmed() -> void:
+	_current_waypoints.sort_custom(func(a, b): return a.get("time", 0.0) < b.get("time", 0.0))
 	emit_signal("waypoints_updated", _current_waypoints)
