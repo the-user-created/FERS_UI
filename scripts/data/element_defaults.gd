@@ -35,7 +35,13 @@ static func getDefaultData(elementType: String, elName: String, elId: String) ->
 			}, true)
 		"timing_source":
 			base_data.merge({
-				"frequency": 10_000_000.0
+				"frequency": 10_000_000.0,
+				"freq_offset": 0.0,
+				"random_freq_offset": 0.0,
+				"phase_offset": 0.0,
+				"random_phase_offset": 0.0,
+				"synconpulse": true,
+				"noise_entries": []
 			}, true)
 		"antenna":
 			base_data.merge({

@@ -48,7 +48,15 @@ func _ready() -> void:
 		"type": "global_simulation_parameters",
 		"start_time": 0.0,
 		"end_time": 1.0,
-		"sampling_rate": 1000000.0
+		"sampling_rate": 1000000.0,
+		"c": 299792458.0,
+		"interprate": 1000,
+		"randomseed": 0,
+		"adc_bits": 0,
+		"oversample": 1,
+		"export": {
+			"xml": true, "csv": true, "binary": false
+		}
 	}
 
 
@@ -272,12 +280,23 @@ func _parse_parameters(parser: XMLParser) -> void:
 		if node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "parameters": break
 		if node_type == XMLParser.NODE_ELEMENT:
 			var key := parser.get_node_name()
-			parser.read() # Move to text node
-			var value := parser.get_node_data().strip_edges().to_float()
-			match key:
-				"starttime": data.start_time = value
-				"endtime": data.end_time = value
-				"rate": data.sampling_rate = value
+			if key == "export":
+				data.export.xml = parser.get_named_attribute_value_safe("xml") == "true"
+				data.export.csv = parser.get_named_attribute_value_safe("csv") == "true"
+				data.export.binary = parser.get_named_attribute_value_safe("binary") == "true"
+				continue
+			parser.read()
+			if parser.get_node_type() == XMLParser.NODE_TEXT:
+				var value_str := parser.get_node_data().strip_edges()
+				match key:
+					"starttime": data.start_time = value_str.to_float()
+					"endtime": data.end_time = value_str.to_float()
+					"rate": data.sampling_rate = value_str.to_float()
+					"c": data.c = value_str.to_float()
+					"interprate": data.interprate = value_str.to_int()
+					"randomseed": data.randomseed = value_str.to_int()
+					"adc_bits": data.adc_bits = value_str.to_int()
+					"oversample": data.oversample = value_str.to_int()
 	_simulation_elements_data["sim_params"] = data
 	emit_signal("element_updated", "sim_params", data)
 
@@ -312,10 +331,32 @@ func _parse_timing(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 	var new_id := "timing_source_%d" % _id_counters.timing_source
 	var data := get_element_data(new_id)
 	data.name = parser.get_named_attribute_value_safe("name")
+	data.freq_offset = parser.get_named_attribute_value_safe("freq_offset").to_float()
+	data.random_freq_offset = parser.get_named_attribute_value_safe("random_freq_offset").to_float()
+	data.phase_offset = parser.get_named_attribute_value_safe("phase_offset").to_float()
+	data.random_phase_offset = parser.get_named_attribute_value_safe("random_phase_offset").to_float()
+	data.synconpulse = parser.get_named_attribute_value_safe("synconpulse") != "false"
 	name_to_id_map[data.name] = new_id
-	while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == "frequency"):
-		pass # Seek to the frequency element
-	data.frequency = parser.get_node_data().strip_edges().to_float()
+	
+	while parser.read() == OK:
+		var node_type = parser.get_node_type()
+		if node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "timing": break
+		if node_type == XMLParser.NODE_ELEMENT:
+			match parser.get_node_name():
+				"frequency":
+					parser.read() # move to text
+					if parser.get_node_type() == XMLParser.NODE_TEXT:
+						data.frequency = parser.get_node_data().strip_edges().to_float()
+				"noise":
+					var noise_entries = []
+					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "noise"):
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == "entry":
+							var entry = {
+								"alpha": parser.get_named_attribute_value_safe("alpha").to_int(),
+								"weight": parser.get_named_attribute_value_safe("weight").to_float()
+							}
+							noise_entries.append(entry)
+					data.noise_entries = noise_entries
 	_simulation_elements_data[new_id] = data
 	emit_signal("element_updated", new_id, data)
 
@@ -351,43 +392,58 @@ func _parse_platform(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "motionpath"):
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == "positionwaypoint":
 							var wp = {"x":0.0, "y":0.0, "altitude":0.0, "time":0.0}
-							while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "positionwaypoint"):
+							while parser.read() == OK:
+								if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "positionwaypoint": break
 								if parser.get_node_type() == XMLParser.NODE_ELEMENT:
 									var key = parser.get_node_name()
 									parser.read()
-									wp[key] = parser.get_node_data().strip_edges().to_float()
+									if parser.get_node_type() == XMLParser.NODE_TEXT:
+										wp[key] = parser.get_node_data().strip_edges().to_float()
 							wps.append(wp)
 					wps.sort_custom(func(a, b): return a.get("time", 0.0) < b.get("time", 0.0))
 					data.motion_path.waypoints = wps
 				"fixedrotation":
 					data.rotation_model.type = "fixed"
-					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "fixedrotation"):
+					while parser.read() == OK:
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "fixedrotation": break
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
-							var key = {"startazimuth":"start_azimuth", "startelevation":"start_elevation", "azimuthrate":"azimuth_rate", "elevationrate":"elevation_rate"}[parser.get_node_name()]
-							parser.read()
-							data.rotation_model.fixed_rotation_data[key] = parser.get_node_data().strip_edges().to_float()
+							var key = {"startazimuth":"start_azimuth", "startelevation":"start_elevation", "azimuthrate":"azimuth_rate", "elevationrate":"elevation_rate"}.get(parser.get_node_name())
+							if key:
+								parser.read()
+								if parser.get_node_type() == XMLParser.NODE_TEXT:
+									data.rotation_model.fixed_rotation_data[key] = parser.get_node_data().strip_edges().to_float()
 				"monostatic":
 					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "monostatic")
 					data.monostatic_radar_type = parser.get_named_attribute_value_safe("type")
 					data.monostatic_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"))
 					data.monostatic_pulse_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("pulse"))
 					data.monostatic_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"))
-					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "monostatic"):
+					while parser.read() == OK:
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "monostatic": break
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
-							var key = {"window_skip":"monostatic_window_skip", "window_length":"monostatic_window_length", "prf":"monostatic_prf", "noise_temp":"monostatic_noise_temp"}[parser.get_node_name()]
-							parser.read()
-							data[key] = parser.get_node_data().strip_edges().to_float()
+							var key = {"window_skip":"monostatic_window_skip", "window_length":"monostatic_window_length", "prf":"monostatic_prf", "noise_temp":"monostatic_noise_temp"}.get(parser.get_node_name())
+							if key:
+								parser.read()
+								if parser.get_node_type() == XMLParser.NODE_TEXT:
+									data[key] = parser.get_node_data().strip_edges().to_float()
 				"target":
 					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "target")
-					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "target"):
+					while parser.read() == OK:
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "target": break
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
 							if parser.get_node_name() == "rcs":
 								data.target_rcs_type_actual = parser.get_named_attribute_value_safe("type")
 								if data.target_rcs_type_actual == "file":
 									data.target_rcs_filename = parser.get_named_attribute_value_safe("filename")
 								else: # isotropic
-									parser.read(); parser.read()
-									data.target_rcs_value = parser.get_node_data().strip_edges().to_float()
+									while parser.read() == OK:
+										var rcs_node_type = parser.get_node_type()
+										if rcs_node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "rcs": break
+										if rcs_node_type == XMLParser.NODE_ELEMENT and parser.get_node_name() == "value":
+											parser.read()
+											if parser.get_node_type() == XMLParser.NODE_TEXT:
+												data.target_rcs_value = parser.get_node_data().strip_edges().to_float()
+												break # Found value
 	_simulation_elements_data[new_id] = data
 	emit_signal("element_updated", new_id, data)
 
@@ -436,6 +492,19 @@ func _build_parameters_xml(data: Dictionary, indent: String) -> String:
 	parts.append(indent + "    <starttime>%s</starttime>" % data.get("start_time", 0.0))
 	parts.append(indent + "    <endtime>%s</endtime>" % data.get("end_time", 1.0))
 	parts.append(indent + "    <rate>%s</rate>" % data.get("sampling_rate", 1e6))
+	if data.has("c"): parts.append(indent + "    <c>%s</c>" % data.get("c"))
+	if data.has("interprate"): parts.append(indent + "    <interprate>%s</interprate>" % data.get("interprate"))
+	if data.has("randomseed"): parts.append(indent + "    <randomseed>%s</randomseed>" % data.get("randomseed"))
+	if data.has("adc_bits"): parts.append(indent + "    <adc_bits>%s</adc_bits>" % data.get("adc_bits"))
+	if data.has("oversample"): parts.append(indent + "    <oversample>%s</oversample>" % data.get("oversample"))
+	
+	var export_data = data.get("export", {})
+	var export_attrs = 'xml="%s" csv="%s" binary="%s"' % [
+		str(export_data.get("xml", true)).to_lower(),
+		str(export_data.get("csv", true)).to_lower(),
+		str(export_data.get("binary", false)).to_lower()
+	]
+	parts.append(indent + "    <export %s/>" % export_attrs)
 	parts.append(indent + "</parameters>")
 	return "\n".join(parts)
 
@@ -454,8 +523,22 @@ func _build_pulse_xml(data: Dictionary, indent: String) -> String:
 
 func _build_timing_xml(data: Dictionary, indent: String) -> String:
 	var parts: Array
-	parts.append(indent + '<timing name="%s">' % data.get("name", "unnamed"))
+	var attrs = 'name="%s"' % data.get("name", "unnamed")
+	if data.get("freq_offset", 0.0) != 0.0: attrs += ' freq_offset="%s"' % data.freq_offset
+	if data.get("random_freq_offset", 0.0) != 0.0: attrs += ' random_freq_offset="%s"' % data.random_freq_offset
+	if data.get("phase_offset", 0.0) != 0.0: attrs += ' phase_offset="%s"' % data.phase_offset
+	if data.get("random_phase_offset", 0.0) != 0.0: attrs += ' random_phase_offset="%s"' % data.random_phase_offset
+	if not data.get("synconpulse", true): attrs += ' synconpulse="false"'
+	
+	parts.append(indent + '<timing %s>' % attrs)
 	parts.append(indent + "    <frequency>%s</frequency>" % data.get("frequency", 1e7))
+	
+	var noise_entries = data.get("noise_entries", [])
+	if not noise_entries.is_empty():
+		parts.append(indent + "    <noise>")
+		for entry in noise_entries:
+			parts.append(indent + '        <entry alpha="%d" weight="%s"/>' % [entry.get("alpha", 0), entry.get("weight", 0.0)])
+		parts.append(indent + "    </noise>")
 	parts.append(indent + '</timing>')
 	return "\n".join(parts)
 
