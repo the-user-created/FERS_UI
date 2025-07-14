@@ -330,33 +330,41 @@ func _parse_timing(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 	create_new_element("timing_source")
 	var new_id := "timing_source_%d" % _id_counters.timing_source
 	var data := get_element_data(new_id)
+
+	# Attributes from <timing> tag
 	data.name = parser.get_named_attribute_value_safe("name")
-	data.freq_offset = parser.get_named_attribute_value_safe("freq_offset").to_float()
-	data.random_freq_offset = parser.get_named_attribute_value_safe("random_freq_offset").to_float()
-	data.phase_offset = parser.get_named_attribute_value_safe("phase_offset").to_float()
-	data.random_phase_offset = parser.get_named_attribute_value_safe("random_phase_offset").to_float()
 	data.synconpulse = parser.get_named_attribute_value_safe("synconpulse") != "false"
 	name_to_id_map[data.name] = new_id
 	
+	var noise_entries = []
+
 	while parser.read() == OK:
 		var node_type = parser.get_node_type()
 		if node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "timing": break
-		if node_type == XMLParser.NODE_ELEMENT:
-			match parser.get_node_name():
-				"frequency":
-					parser.read() # move to text
+		
+		if node_type == XMLParser.NODE_ELEMENT and not parser.is_empty():
+			var key := parser.get_node_name()
+			match key:
+				"frequency", "freq_offset", "random_freq_offset", "phase_offset", "random_phase_offset":
+					parser.read() # Move to text content
 					if parser.get_node_type() == XMLParser.NODE_TEXT:
-						data.frequency = parser.get_node_data().strip_edges().to_float()
-				"noise":
-					var noise_entries = []
-					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "noise"):
-						if parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == "entry":
-							var entry = {
-								"alpha": parser.get_named_attribute_value_safe("alpha").to_int(),
-								"weight": parser.get_named_attribute_value_safe("weight").to_float()
-							}
-							noise_entries.append(entry)
-					data.noise_entries = noise_entries
+						data[key] = parser.get_node_data().strip_edges().to_float()
+				"noise_entry":
+					var entry := {"alpha": 0, "weight": 0.0}
+					while parser.read() == OK:
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "noise_entry": break
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
+							var sub_key := parser.get_node_name()
+							parser.read() # Move to text content
+							if parser.get_node_type() == XMLParser.NODE_TEXT:
+								var sub_value_str := parser.get_node_data().strip_edges()
+								if sub_key == "alpha":
+									entry.alpha = sub_value_str.to_int()
+								elif sub_key == "weight":
+									entry.weight = sub_value_str.to_float()
+					noise_entries.append(entry)
+	
+	data.noise_entries = noise_entries
 	_simulation_elements_data[new_id] = data
 	emit_signal("element_updated", new_id, data)
 
@@ -547,21 +555,29 @@ func _build_pulse_xml(data: Dictionary, indent: String) -> String:
 func _build_timing_xml(data: Dictionary, indent: String) -> String:
 	var parts: Array
 	var attrs = 'name="%s"' % data.get("name", "unnamed")
-	if data.get("freq_offset", 0.0) != 0.0: attrs += ' freq_offset="%s"' % data.freq_offset
-	if data.get("random_freq_offset", 0.0) != 0.0: attrs += ' random_freq_offset="%s"' % data.random_freq_offset
-	if data.get("phase_offset", 0.0) != 0.0: attrs += ' phase_offset="%s"' % data.phase_offset
-	if data.get("random_phase_offset", 0.0) != 0.0: attrs += ' random_phase_offset="%s"' % data.random_phase_offset
-	if not data.get("synconpulse", true): attrs += ' synconpulse="false"'
-	
+
+	# To be explicit and match the example, we write the synconpulse attribute.
+	if data.get("synconpulse", true):
+		attrs += ' synconpulse="true"'
+	else:
+		attrs += ' synconpulse="false"'
+
 	parts.append(indent + '<timing %s>' % attrs)
-	parts.append(indent + "    <frequency>%s</frequency>" % data.get("frequency", 1e7))
 	
+	parts.append(indent + "    <frequency>%s</frequency>" % data.get("frequency", 1e7))
+	parts.append(indent + "    <freq_offset>%s</freq_offset>" % data.get("freq_offset", 0.0))
+	parts.append(indent + "    <random_freq_offset>%s</random_freq_offset>" % data.get("random_freq_offset", 0.0))
+	parts.append(indent + "    <phase_offset>%s</phase_offset>" % data.get("phase_offset", 0.0))
+	parts.append(indent + "    <random_phase_offset>%s</random_phase_offset>" % data.get("random_phase_offset", 0.0))
+
 	var noise_entries = data.get("noise_entries", [])
 	if not noise_entries.is_empty():
-		parts.append(indent + "    <noise>")
 		for entry in noise_entries:
-			parts.append(indent + '        <entry alpha="%d" weight="%s"/>' % [entry.get("alpha", 0), entry.get("weight", 0.0)])
-		parts.append(indent + "    </noise>")
+			parts.append(indent + "    <noise_entry>")
+			parts.append(indent + '        <alpha>%d</alpha>' % entry.get("alpha", 0))
+			parts.append(indent + '        <weight>%s</weight>' % entry.get("weight", 0.0))
+			parts.append(indent + "    </noise_entry>")
+
 	parts.append(indent + '</timing>')
 	return "\n".join(parts)
 
