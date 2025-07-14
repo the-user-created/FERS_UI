@@ -365,11 +365,34 @@ func _parse_antenna(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 	create_new_element("antenna")
 	var new_id := "antenna_%d" % _id_counters.antenna
 	var data := get_element_data(new_id)
+
+	# Parse attributes
 	data.name = parser.get_named_attribute_value_safe("name")
 	data.antenna_pattern_actual = parser.get_named_attribute_value_safe("pattern")
 	if data.antenna_pattern_actual in ["xml", "file"]:
 		data.filename = parser.get_named_attribute_value_safe("filename")
 	name_to_id_map[data.name] = new_id
+
+	# If the node is empty (<antenna ... />), there are no children to parse.
+	if parser.is_empty():
+		_simulation_elements_data[new_id] = data
+		emit_signal("element_updated", new_id, data)
+		return
+
+	# Loop through child elements for parameters
+	while parser.read() == OK:
+		var node_type = parser.get_node_type()
+		if node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "antenna":
+			break # End of antenna block
+
+		if node_type == XMLParser.NODE_ELEMENT:
+			var key := parser.get_node_name()
+			parser.read() # Move to text content
+			if parser.get_node_type() == XMLParser.NODE_TEXT:
+				var value_str := parser.get_node_data().strip_edges()
+				if value_str.is_valid_float():
+					data[key] = value_str.to_float()
+
 	_simulation_elements_data[new_id] = data
 	emit_signal("element_updated", new_id, data)
 
@@ -544,9 +567,29 @@ func _build_timing_xml(data: Dictionary, indent: String) -> String:
 
 
 func _build_antenna_xml(data: Dictionary, indent: String) -> String:
+	var parts: Array
 	var pattern: String = data.get("antenna_pattern_actual", "isotropic")
 	var filename_attr := ' filename="%s"' % data.get("filename", "") if pattern in ["xml", "file"] else ""
-	return indent + '<antenna name="%s" pattern="%s"%s/>' % [data.get("name", "unnamed"), pattern, filename_attr]
+	
+	parts.append(indent + '<antenna name="%s" pattern="%s"%s>' % [data.get("name", "unnamed"), pattern, filename_attr])
+	
+	var sub_indent = indent + "    "
+	match pattern:
+		"sinc":
+			parts.append(sub_indent + "<alpha>%s</alpha>" % data.get("alpha", 1.0))
+			parts.append(sub_indent + "<beta>%s</beta>" % data.get("beta", 1.0))
+			parts.append(sub_indent + "<gamma>%s</gamma>" % data.get("gamma", 1.0))
+		"gaussian":
+			parts.append(sub_indent + "<azscale>%s</azscale>" % data.get("azscale", 1.0))
+			parts.append(sub_indent + "<elscale>%s</elscale>" % data.get("elscale", 1.0))
+		"squarehorn", "parabolic":
+			parts.append(sub_indent + "<diameter>%s</diameter>" % data.get("diameter", 1.0))
+	
+	# Efficiency is common to all patterns
+	parts.append(sub_indent + "<efficiency>%s</efficiency>" % data.get("efficiency", 1.0))
+
+	parts.append(indent + '</antenna>')
+	return "\n".join(parts)
 
 
 func _build_platform_xml(data: Dictionary, indent: String) -> String:

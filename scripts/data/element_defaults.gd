@@ -46,7 +46,14 @@ static func getDefaultData(elementType: String, elName: String, elId: String) ->
 		"antenna":
 			base_data.merge({
 				"antenna_pattern_actual": "isotropic",
-				"filename": ""
+				"filename": "",
+				"efficiency": 1.0,
+				"alpha": 1.0,
+				"beta": 1.0,
+				"gamma": 1.0,
+				"azscale": 1.0,
+				"elscale": 1.0,
+				"diameter": 1.0
 			}, true)
 		_:
 			printerr("ElementDefaults: Unknown element type for default data: ", elementType)
