@@ -28,8 +28,12 @@ render_target_update_mode = 4
 [node name="world_3d_root" type="Node3D" parent="simulation_3d_viewport"]
 unique_name_in_owner = true
 
+[node name="CartesianGrid" type="MeshInstance3D" parent="simulation_3d_viewport/world_3d_root"]
+
 [node name="main_camera_3d" type="Camera3D" parent="simulation_3d_viewport/world_3d_root"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 10)
+near = 0.5
+far = 500000.0
 
 [node name="directional_light_3d" type="DirectionalLight3D" parent="simulation_3d_viewport/world_3d_root"]
 transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 0, 0)

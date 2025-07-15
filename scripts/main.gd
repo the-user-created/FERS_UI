@@ -16,6 +16,7 @@ extends Control
 @onready var play_pause_button: Button = %play_pause_button
 @onready var step_forward_button: Button = %step_forward_button
 @onready var time_label: Label = %time_label
+@onready var grid_toggle_checkbox: CheckBox = %grid_toggle_checkbox
 @onready var frame_scene_button: Button = %frame_scene_button
 @onready var file_menu_button: MenuButton = %file_menu_button
 
@@ -32,6 +33,8 @@ func _ready() -> void:
 	toggle_left_sidebar_button.pressed.connect(_on_toggle_left_sidebar_button_pressed)
 	toggle_right_sidebar_button.pressed.connect(_on_toggle_right_sidebar_button_pressed)
 	frame_scene_button.pressed.connect(world_3d_view.frame_scene_contents)
+	grid_toggle_checkbox.toggled.connect(world_3d_view.toggle_grid_visibility)
+	grid_toggle_checkbox.button_pressed = world_3d_view.show_grid # Set initial state
 	right_sidebar.camera_focus_requested.connect(_on_camera_focus_requested)
 	
 	# Setup File menu and dialogs

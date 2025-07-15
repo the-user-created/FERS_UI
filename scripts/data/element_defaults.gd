@@ -1,12 +1,29 @@
 class_name ElementDefaults
 
+# --- Platform Color Definitions ---
+const COLOR_TX = Color.CRIMSON
+const COLOR_RX = Color.CORNFLOWER_BLUE
+const COLOR_MONO = Color.REBECCA_PURPLE
+const COLOR_TARGET = Color.WEB_GRAY
+
+
+# --- Helper to get default color by type ---
+static func getPlatformDefaultColor(platformSubtype: String) -> Color:
+	match platformSubtype:
+		"monostatic": return COLOR_MONO
+		"transmitter": return COLOR_TX
+		"receiver": return COLOR_RX
+		"target": return COLOR_TARGET
+	return COLOR_TARGET # Fallback
+
+
 # Default data for newly created elements
 static func getDefaultData(elementType: String, elName: String, elId: String) -> Dictionary:
 	var base_data: Dictionary = {"id": elId, "type": elementType, "name": elName}
 	match elementType:
 		"platform":
 			base_data.merge({
-				"color": Color.from_hsv(randf(), 0.8, 1.0),
+				"color": getPlatformDefaultColor("target"),
 				"platform_type_actual": "target",
 				"motion_path": {
 					"interpolation": "static", # static, linear, cubic
@@ -51,8 +68,8 @@ static func getDefaultData(elementType: String, elName: String, elId: String) ->
 				"alpha": 1.0,
 				"beta": 1.0,
 				"gamma": 1.0,
-				"azscale": 1.0,
-				"elscale": 1.0,
+				"azscale": 5.0,
+				"elscale": 5.0,
 				"diameter": 1.0
 			}, true)
 		_:
@@ -128,7 +145,7 @@ static func preparePlatformDataForSubtypeChange(existingData: Dictionary, newSub
 		"id": existingData.id,
 		"type": "platform",
 		"name": existingData.name,
-		"color": existingData.get("color", Color.from_hsv(randf(), 0.8, 1.0)),
+		"color": existingData.get("color"),
 		"motion_path": existingData.get("motion_path", default_platform_data.motion_path),
 		"rotation_model": existingData.get("rotation_model", default_platform_data.rotation_model),
 		"platform_type_actual": newSubtype

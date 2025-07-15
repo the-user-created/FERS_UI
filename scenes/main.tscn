@@ -85,6 +85,12 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Frame Scene"
 
+[node name="grid_toggle_checkbox" type="CheckBox" parent="main_layout/middle_view_container/playback_controls"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Toggle Grid Visibility"
+text = "Grid"
+
 [node name="world_3d_view" parent="main_layout/middle_view_container" instance=ExtResource("3_r0du0")]
 unique_name_in_owner = true
 layout_mode = 2

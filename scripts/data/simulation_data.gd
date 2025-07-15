@@ -129,26 +129,37 @@ func update_element_property(element_id: String, property_key: String, new_value
 	var element_data: Dictionary = _simulation_elements_data[element_id]
 	var old_name = element_data.get("name", "")
 
-	# Special handling for nested properties
-	if property_key == "motion_path_interpolation":
-		if element_data.has("motion_path") and element_data.motion_path is Dictionary:
-			element_data.motion_path.interpolation = new_value
-	elif property_key == "rotation_model_type":
-		if element_data.has("rotation_model") and element_data.rotation_model is Dictionary:
-			element_data.rotation_model.type = new_value
-	elif property_key == "rotation_path_interpolation":
-		if element_data.has("rotation_model") and element_data.rotation_model.rotation_path_data is Dictionary:
-			element_data.rotation_model.rotation_path_data.interpolation = new_value
-	else:
-		element_data[property_key] = new_value
-
 	# Special handling for platform subtype changes which requires rebuilding the data structure
 	var structural_refresh_keys: Dictionary = ElementDefaults.getStructuralRefreshTriggerKeys()
 	var keys_for_current_type = structural_refresh_keys.get(element_data.type, [])
 
 	if property_key in keys_for_current_type and element_data.type == "platform" and property_key == "platform_type_actual":
+		var old_subtype = element_data.get("platform_type_actual")
+		var old_color = element_data.get("color")
+		var was_default_color = (old_color == ElementDefaults.getPlatformDefaultColor(old_subtype))
+		
 		element_data = ElementDefaults.preparePlatformDataForSubtypeChange(element_data, new_value)
+		
+		# If the color was the default for the old type, update it to the default for the new type.
+		if was_default_color:
+			element_data.color = ElementDefaults.getPlatformDefaultColor(new_value)
+		else: # User had a custom color, so we preserve it.
+			element_data.color = old_color
+		
 		_simulation_elements_data[element_id] = element_data
+	else:
+		# Special handling for nested properties
+		if property_key == "motion_path_interpolation":
+			if element_data.has("motion_path") and element_data.motion_path is Dictionary:
+				element_data.motion_path.interpolation = new_value
+		elif property_key == "rotation_model_type":
+			if element_data.has("rotation_model") and element_data.rotation_model is Dictionary:
+				element_data.rotation_model.type = new_value
+		elif property_key == "rotation_path_interpolation":
+			if element_data.has("rotation_model") and element_data.rotation_model.rotation_path_data is Dictionary:
+				element_data.rotation_model.rotation_path_data.interpolation = new_value
+		else:
+			element_data[property_key] = new_value
 
 	# If the name changed, ensure the original name property is also updated
 	if property_key == "name" or (element_data.type == "global_simulation_name" and property_key == "name_value"):
@@ -462,10 +473,11 @@ func _parse_platform(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 					data.rotation_model.rotation_path_data.waypoints = wps
 				"monostatic":
 					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "monostatic")
+					data.color = ElementDefaults.getPlatformDefaultColor("monostatic")
 					data.monostatic_radar_type = parser.get_named_attribute_value_safe("type")
-					data.monostatic_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"))
-					data.monostatic_pulse_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("pulse"))
-					data.monostatic_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"))
+					data.monostatic_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"), "")
+					data.monostatic_pulse_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("pulse"), "")
+					data.monostatic_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"), "")
 					data.monostatic_nodirect = parser.get_named_attribute_value_safe("nodirect") == "true"
 					data.monostatic_nopropagationloss = parser.get_named_attribute_value_safe("nopropagationloss") == "true"
 					while parser.read() == OK:
@@ -478,10 +490,11 @@ func _parse_platform(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 									data[key] = parser.get_node_data().strip_edges().to_float()
 				"transmitter":
 					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "transmitter")
+					data.color = ElementDefaults.getPlatformDefaultColor("transmitter")
 					data.transmitter_type_actual = parser.get_named_attribute_value_safe("type")
-					data.transmitter_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"))
-					data.transmitter_pulse_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("pulse"))
-					data.transmitter_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"))
+					data.transmitter_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"), "")
+					data.transmitter_pulse_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("pulse"), "")
+					data.transmitter_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"), "")
 					while parser.read() == OK:
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "transmitter": break
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == "prf":
@@ -491,8 +504,9 @@ func _parse_platform(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 							break
 				"receiver":
 					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "receiver")
-					data.receiver_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"))
-					data.receiver_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"))
+					data.color = ElementDefaults.getPlatformDefaultColor("receiver")
+					data.receiver_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"), "")
+					data.receiver_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"), "")
 					data.receiver_nodirect = parser.get_named_attribute_value_safe("nodirect") == "true"
 					data.receiver_nopropagationloss = parser.get_named_attribute_value_safe("nopropagationloss") == "true"
 					while parser.read() == OK:
@@ -505,6 +519,7 @@ func _parse_platform(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 									data[key] = parser.get_node_data().strip_edges().to_float()
 				"target":
 					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "target")
+					data.color = ElementDefaults.getPlatformDefaultColor("target")
 					while parser.read() == OK:
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "target": break
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
