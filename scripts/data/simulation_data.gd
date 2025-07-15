@@ -443,16 +443,62 @@ func _parse_platform(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 								parser.read()
 								if parser.get_node_type() == XMLParser.NODE_TEXT:
 									data.rotation_model.fixed_rotation_data[key] = parser.get_node_data().strip_edges().to_float()
+				"rotationpath":
+					data.rotation_model.type = "path"
+					data.rotation_model.rotation_path_data.interpolation = parser.get_named_attribute_value_safe("interpolation")
+					var wps = []
+					while parser.read() == OK and not (parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "rotationpath"):
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == "rotationwaypoint":
+							var wp = {"azimuth":0.0, "elevation":0.0, "time":0.0}
+							while parser.read() == OK:
+								if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "rotationwaypoint": break
+								if parser.get_node_type() == XMLParser.NODE_ELEMENT:
+									var key = parser.get_node_name()
+									parser.read()
+									if parser.get_node_type() == XMLParser.NODE_TEXT:
+										wp[key] = parser.get_node_data().strip_edges().to_float()
+							wps.append(wp)
+					wps.sort_custom(func(a, b): return a.get("time", 0.0) < b.get("time", 0.0))
+					data.rotation_model.rotation_path_data.waypoints = wps
 				"monostatic":
 					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "monostatic")
 					data.monostatic_radar_type = parser.get_named_attribute_value_safe("type")
 					data.monostatic_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"))
 					data.monostatic_pulse_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("pulse"))
 					data.monostatic_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"))
+					data.monostatic_nodirect = parser.get_named_attribute_value_safe("nodirect") == "true"
+					data.monostatic_nopropagationloss = parser.get_named_attribute_value_safe("nopropagationloss") == "true"
 					while parser.read() == OK:
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "monostatic": break
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
 							var key = {"window_skip":"monostatic_window_skip", "window_length":"monostatic_window_length", "prf":"monostatic_prf", "noise_temp":"monostatic_noise_temp"}.get(parser.get_node_name())
+							if key:
+								parser.read()
+								if parser.get_node_type() == XMLParser.NODE_TEXT:
+									data[key] = parser.get_node_data().strip_edges().to_float()
+				"transmitter":
+					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "transmitter")
+					data.transmitter_type_actual = parser.get_named_attribute_value_safe("type")
+					data.transmitter_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"))
+					data.transmitter_pulse_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("pulse"))
+					data.transmitter_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"))
+					while parser.read() == OK:
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "transmitter": break
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT and parser.get_node_name() == "prf":
+							parser.read()
+							if parser.get_node_type() == XMLParser.NODE_TEXT:
+								data.transmitter_prf = parser.get_node_data().strip_edges().to_float()
+							break
+				"receiver":
+					data = ElementDefaults.preparePlatformDataForSubtypeChange(data, "receiver")
+					data.receiver_antenna_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("antenna"))
+					data.receiver_timing_id_ref = name_to_id_map.get(parser.get_named_attribute_value_safe("timing"))
+					data.receiver_nodirect = parser.get_named_attribute_value_safe("nodirect") == "true"
+					data.receiver_nopropagationloss = parser.get_named_attribute_value_safe("nopropagationloss") == "true"
+					while parser.read() == OK:
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "receiver": break
+						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
+							var key = {"window_skip":"receiver_window_skip", "window_length":"receiver_window_length", "prf":"receiver_prf", "noise_temp":"receiver_noise_temp"}.get(parser.get_node_name())
 							if key:
 								parser.read()
 								if parser.get_node_type() == XMLParser.NODE_TEXT:
@@ -462,19 +508,31 @@ func _parse_platform(parser: XMLParser, name_to_id_map: Dictionary) -> void:
 					while parser.read() == OK:
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "target": break
 						if parser.get_node_type() == XMLParser.NODE_ELEMENT:
-							if parser.get_node_name() == "rcs":
-								data.target_rcs_type_actual = parser.get_named_attribute_value_safe("type")
-								if data.target_rcs_type_actual == "file":
-									data.target_rcs_filename = parser.get_named_attribute_value_safe("filename")
-								else: # isotropic
-									while parser.read() == OK:
-										var rcs_node_type = parser.get_node_type()
-										if rcs_node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "rcs": break
-										if rcs_node_type == XMLParser.NODE_ELEMENT and parser.get_node_name() == "value":
-											parser.read()
-											if parser.get_node_type() == XMLParser.NODE_TEXT:
-												data.target_rcs_value = parser.get_node_data().strip_edges().to_float()
+							match parser.get_node_name():
+								"rcs":
+									data.target_rcs_type_actual = parser.get_named_attribute_value_safe("type")
+									if data.target_rcs_type_actual == "file":
+										data.target_rcs_filename = parser.get_named_attribute_value_safe("filename")
+									else: # isotropic
+										while parser.read() == OK:
+											var rcs_node_type = parser.get_node_type()
+											if rcs_node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "rcs": break
+											if rcs_node_type == XMLParser.NODE_ELEMENT and parser.get_node_name() == "value":
+												parser.read()
+												if parser.get_node_type() == XMLParser.NODE_TEXT:
+													data.target_rcs_value = parser.get_node_data().strip_edges().to_float()
 												break # Found value
+								"model":
+									data.target_rcs_fluctuation_model_type = parser.get_named_attribute_value_safe("type")
+									if data.target_rcs_fluctuation_model_type != "constant":
+										while parser.read() == OK:
+											var model_node_type = parser.get_node_type()
+											if model_node_type == XMLParser.NODE_ELEMENT_END and parser.get_node_name() == "model": break
+											if model_node_type == XMLParser.NODE_ELEMENT and parser.get_node_name() == "k":
+												parser.read()
+												if parser.get_node_type() == XMLParser.NODE_TEXT:
+													data.target_rcs_fluctuation_k = parser.get_node_data().strip_edges().to_float()
+												break # Found k
 	_simulation_elements_data[new_id] = data
 	emit_signal("element_updated", new_id, data)
 
