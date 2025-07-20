@@ -15,12 +15,9 @@ extends SubViewportContainer
 @export var boresight_length: float = 30.0 # Default length for boresight visuals
 @export_category("Grid")
 @export var show_grid: bool = true
-@export var grid_max_render_size: float = 1000.0
-@export var major_line_color := Color.from_string("474f57", Color.DARK_SLATE_GRAY)
-@export var minor_line_color := Color(0.3, 0.3, 0.3, 0.5)
-@export var x_axis_color := Color.from_string("ff4444", Color.RED)
-@export var y_axis_color := Color.from_string("99ff44", Color.GREEN)
-@export var z_axis_color := Color.from_string("4499ff", Color.BLUE)
+@export var grid_color: Color = Color(0.5, 0.5, 0.5, 1.0)
+@export var grid_spacing: float = 10.0
+@export var grid_line_width: float = 0.05
 
 # --- ONREADY VARIABLES ---
 @onready var world_3d_root: Node3D = %world_3d_root
@@ -38,8 +35,6 @@ var _is_panning: bool = false
 var _cubic_dd_cache: Dictionary = {}
 var _cubic_rot_dd_cache: Dictionary = {}
 # --- STATE ---
-var _last_grid_camera_distance := 0.0
-var _last_grid_target_position := Vector3.INF
 var _has_focus: bool = false
 
 func _ready() -> void:
@@ -61,9 +56,8 @@ func _ready() -> void:
 	call_deferred("_populate_and_position_initial_platforms")
 
 	# Initialize grid visibility and draw it for the first time
+	_setup_grid()
 	grid_mesh_instance.visible = show_grid
-	if show_grid:
-		_update_grid()
 
 
 func _populate_and_position_initial_platforms() -> void:
@@ -667,73 +661,33 @@ func toggle_grid_visibility(should_show: bool) -> void:
 	show_grid = should_show
 	if is_instance_valid(grid_mesh_instance):
 		grid_mesh_instance.visible = show_grid
-		if show_grid:
-			_update_grid() # Redraw if it was just made visible
 
 
-func _update_grid() -> void:
-	# TODO: This grid should be rendered via a shader.
-	# TODO: The axis lines should be rendered along with the grid lines and should extend to infinity.
-	if not is_instance_valid(grid_mesh_instance): return
-	
-	var imm_mesh := ImmediateMesh.new()
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color.WHITE # This will be overridden by vertex colors
-	mat.vertex_color_use_as_albedo = true
-	mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-	grid_mesh_instance.mesh = imm_mesh
-	grid_mesh_instance.material_override = mat
+func _setup_grid() -> void:
+	if not is_instance_valid(grid_mesh_instance):
+		return
 
-	# Adaptive grid spacing
-	var step = pow(10, floor(log(max(1.0, _camera_distance / 10.0)) / log(10)))
-	var major_step = step * 10
-	var grid_center = Vector3(
-		snapped(_target_position.x, major_step),
-		0,
-		snapped(_target_position.z, major_step)
-	)
+	# Create the Grid Plane Geometry
+	var plane_mesh := QuadMesh.new()
+	# The QuadMesh is on the XY plane by default. We rotate it to lie on the XZ plane.
+	grid_mesh_instance.rotation_degrees = Vector3(-90, 0, 0)
 
-	imm_mesh.surface_begin(Mesh.PRIMITIVE_LINES)
-	
-	var half_size = grid_max_render_size / 2.0
-	var num_lines = int(half_size / step)
-	
-	# Draw minor/major grid lines on XZ plane
-	for i in range(-num_lines, num_lines + 1):
-		var offset = i * step
-		var color = major_line_color if fmod(offset, major_step) == 0.0 else minor_line_color
-		
-		# Lines parallel to Z axis
-		imm_mesh.surface_set_color(color)
-		imm_mesh.surface_add_vertex(grid_center + Vector3(offset, 0, -half_size))
-		imm_mesh.surface_set_color(color)
-		imm_mesh.surface_add_vertex(grid_center + Vector3(offset, 0, half_size))
-		
-		# Lines parallel to X axis
-		imm_mesh.surface_set_color(color)
-		imm_mesh.surface_add_vertex(grid_center + Vector3(-half_size, 0, offset))
-		imm_mesh.surface_set_color(color)
-		imm_mesh.surface_add_vertex(grid_center + Vector3(half_size, 0, offset))
+	# Make it large enough to cover the camera's view, even when zoomed out.
+	var plane_size := camera.far * 2.0
+	plane_mesh.size = Vector2(plane_size, plane_size)
+	grid_mesh_instance.mesh = plane_mesh
 
-	# Draw main axes
-	# Y axis (Green)
-	imm_mesh.surface_set_color(y_axis_color)
-	imm_mesh.surface_add_vertex(Vector3(0, -grid_max_render_size, 0))
-	imm_mesh.surface_set_color(y_axis_color)
-	imm_mesh.surface_add_vertex(Vector3(0, grid_max_render_size, 0))
-	# X axis (Red)
-	imm_mesh.surface_set_color(x_axis_color)
-	imm_mesh.surface_add_vertex(Vector3.ZERO)
-	imm_mesh.surface_set_color(x_axis_color)
-	imm_mesh.surface_add_vertex(Vector3(grid_max_render_size, 0, 0))
-	# Z axis (Blue)
-	imm_mesh.surface_set_color(z_axis_color)
-	imm_mesh.surface_add_vertex(Vector3.ZERO)
-	imm_mesh.surface_set_color(z_axis_color)
-	imm_mesh.surface_add_vertex(Vector3(0, 0, grid_max_render_size))
+	# Create and apply shader material
+	var grid_shader := load("res://assets/shaders/grid_shader.gdshader")
+	var grid_material := ShaderMaterial.new()
+	grid_material.shader = grid_shader
 
-	imm_mesh.surface_end()
+	# Set uniforms from the exported script variables
+	grid_material.set_shader_parameter("grid_color", grid_color)
+	grid_material.set_shader_parameter("grid_spacing", grid_spacing)
+	grid_material.set_shader_parameter("line_width", grid_line_width)
+
+	grid_mesh_instance.material_override = grid_material
 
 
 # --- Rotation Interpolation ---
@@ -964,15 +918,6 @@ func _process(delta: float) -> void:
 		if orbit_input != Vector2.ZERO:
 			_camera_yaw += orbit_input.x * keyboard_orbit_speed * delta
 			_camera_pitch = clamp(_camera_pitch + orbit_input.y * keyboard_orbit_speed * delta, -PI / 2.0 + 0.01, PI / 2.0 - 0.01)
-
-	if show_grid:
-		# Check if we need to redraw the grid (camera moved significantly)
-		var dist_check = abs(_camera_distance - _last_grid_camera_distance) > _last_grid_camera_distance * 0.1
-		var pos_check = _target_position.distance_to(_last_grid_target_position) > 1.0
-		if dist_check or pos_check:
-			_update_grid()
-			_last_grid_camera_distance = _camera_distance
-			_last_grid_target_position = _target_position
 
 	_update_dynamic_view_elements()
 	_update_camera_transform()
