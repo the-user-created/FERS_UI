@@ -678,13 +678,15 @@ func _setup_grid() -> void:
 
 	# Create the Grid Plane Geometry
 	var plane_mesh := QuadMesh.new()
-	# The QuadMesh is on the XY plane by default. We rotate it to lie on the XZ plane.
-	grid_mesh_instance.rotation_degrees = Vector3(-90, 0, 0)
-
-	# Make it large enough to cover the camera's view, even when zoomed out.
-	var plane_size := camera.far * 2.0
-	plane_mesh.size = Vector2(plane_size, plane_size)
+	# The QuadMesh is on the XY plane by default. For a full-screen shader pass,
+	# we only need a simple 2x2 quad, as the vertex shader will handle stretching
+	# it to cover the screen. This gives vertex coordinates from -1 to 1.
+	plane_mesh.size = Vector2(2, 2)
 	grid_mesh_instance.mesh = plane_mesh
+
+	# The rotation is no longer needed as the vertex shader now directly
+	# controls the quad's screen position and the grid is conceptually infinite.
+	grid_mesh_instance.rotation_degrees = Vector3.ZERO
 
 	# Create and apply shader material
 	var grid_shader := load("res://assets/shaders/grid_shader.gdshader")
