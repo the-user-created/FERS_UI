@@ -19,15 +19,6 @@ extends SubViewportContainer
 @export var minor_grid_color: Color = Color(0.5, 0.5, 0.5, 0.25)
 @export var grid_line_width: float = 0.05
 
-# --- CONSTANTS ---
-const LOD_TIERS = [
-	{"threshold": 1000.0, "spacing": 1000.0},
-	{"threshold": 100.0, "spacing": 100.0},
-	{"threshold": 10.0, "spacing": 10.0},
-	{"threshold": 1.0, "spacing": 1.0},
-	{"threshold": 0.0, "spacing": 0.1}
-]
-
 # --- ONREADY VARIABLES ---
 @onready var world_3d_root: Node3D = %world_3d_root
 @onready var camera: Camera3D = %simulation_3d_viewport.get_node("world_3d_root/main_camera_3d")
@@ -934,27 +925,28 @@ func _process(delta: float) -> void:
 	if show_grid and is_instance_valid(grid_mesh_instance):
 		var grid_material := grid_mesh_instance.get_material_override() as ShaderMaterial
 		if grid_material:
-			var camera_dist := _camera_distance
+			var camera_dist: float = _camera_distance
 			
-			# Determine major and minor spacing based on LOD tiers.
-			var tier_idx := LOD_TIERS.size() - 1
-			for i in range(LOD_TIERS.size()):
-				if camera_dist > LOD_TIERS[i].threshold:
-					tier_idx = i
-					break
+			# Calculate the current LOD level based on a logarithmic scale of the camera distance.
+			# Using log() for natural logarithm, and dividing by log(10.0) to get base-10 log.
+			var log_dist: float = log(camera_dist) / log(10.0) if camera_dist > 0.0 else 0.0
 			
-			var major_spacing = LOD_TIERS[tier_idx].spacing
-			var minor_spacing = LOD_TIERS[tier_idx + 1].spacing if tier_idx + 1 < LOD_TIERS.size() else major_spacing / 10.0
+			# The major grid lines are the primary reference, determined by the integer part of the log.
+			var major_spacing_exponent: float = floor(log_dist)
+			var major_spacing: float = pow(10.0, major_spacing_exponent)
 			
-			# Calculate fade factor for smooth transitions.
-			var fade_factor := 1.0
-			var lower_threshold = LOD_TIERS[tier_idx].threshold
-			var upper_threshold = LOD_TIERS[tier_idx - 1].threshold if tier_idx > 0 else lower_threshold * 10.0
+			# The minor grid lines are one level of detail finer.
+			var minor_spacing: float = major_spacing / 10.0
 			
-			if upper_threshold > lower_threshold:
-				# Calculate a 0-1 value based on how far the camera is between the two thresholds.
-				# This creates a smooth fade-in for the minor grid lines as the camera zooms in.
-				fade_factor = smoothstep(upper_threshold, lower_threshold, camera_dist)
+			# Calculate fade factor for a smooth transition between LODs.
+			# The fractional part of the log tells us how far we are between two levels.
+			var lod_fraction: float = log_dist - floor(log_dist)
+			
+			# We want minor lines to be fully visible when a new LOD level starts (fraction is low),
+			# and fully faded out just before the next level begins (fraction is high).
+			# The range (e.g., 0.5 to 0.9) determines when the fade starts and ends, giving a
+			# period where minor lines are solid before they begin to fade.
+			var fade_factor: float = 1.0 - smoothstep(0.5, 0.9, lod_fraction)
 			
 			# Update all shader uniforms
 			grid_material.set_shader_parameter("major_grid_spacing", major_spacing)
