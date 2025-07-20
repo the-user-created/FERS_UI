@@ -16,8 +16,15 @@ extends SubViewportContainer
 @export_category("Grid")
 @export var show_grid: bool = true
 @export var grid_color: Color = Color(0.5, 0.5, 0.5, 1.0)
-@export var grid_spacing: float = 10.0
 @export var grid_line_width: float = 0.05
+
+# --- CONSTANTS ---
+const LOD_TIERS = [
+	{"threshold": 1000.0, "spacing": 100.0},
+	{"threshold": 100.0, "spacing": 10.0},
+	{"threshold": 10.0, "spacing": 1.0},
+	{"threshold": 0.0, "spacing": 0.1}
+]
 
 # --- ONREADY VARIABLES ---
 @onready var world_3d_root: Node3D = %world_3d_root
@@ -684,7 +691,7 @@ func _setup_grid() -> void:
 
 	# Set uniforms from the exported script variables
 	grid_material.set_shader_parameter("grid_color", grid_color)
-	grid_material.set_shader_parameter("grid_spacing", grid_spacing)
+	grid_material.set_shader_parameter("grid_spacing", 1.0) 
 	grid_material.set_shader_parameter("line_width", grid_line_width)
 
 	grid_mesh_instance.material_override = grid_material
@@ -918,6 +925,23 @@ func _process(delta: float) -> void:
 		if orbit_input != Vector2.ZERO:
 			_camera_yaw += orbit_input.x * keyboard_orbit_speed * delta
 			_camera_pitch = clamp(_camera_pitch + orbit_input.y * keyboard_orbit_speed * delta, -PI / 2.0 + 0.01, PI / 2.0 - 0.01)
+
+	# --- Adaptive Grid Logic ---
+	if show_grid and is_instance_valid(grid_mesh_instance):
+		var grid_material := grid_mesh_instance.get_material_override() as ShaderMaterial
+		if grid_material:
+			# Get camera distance. Using the orbit camera's distance
+			# from its pivot point is a great proxy for zoom level.
+			var camera_dist := _camera_distance
+			
+			# Determine and set spacing based on LOD tiers.
+			var new_spacing := 0.1 # Default to the smallest spacing.
+			for tier in LOD_TIERS:
+				if camera_dist > tier.threshold:
+					new_spacing = tier.spacing
+					break
+			
+			grid_material.set_shader_parameter("grid_spacing", new_spacing)
 
 	_update_dynamic_view_elements()
 	_update_camera_transform()
