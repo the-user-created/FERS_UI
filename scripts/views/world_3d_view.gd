@@ -15,7 +15,8 @@ extends SubViewportContainer
 @export var boresight_length: float = 30.0 # Default length for boresight visuals
 @export_category("Grid")
 @export var show_grid: bool = true
-@export var grid_color: Color = Color(0.5, 0.5, 0.5, 1.0)
+@export var major_grid_color: Color = Color(0.5, 0.5, 0.5, 1.0)
+@export var minor_grid_color: Color = Color(0.5, 0.5, 0.5, 0.5)
 @export var grid_line_width: float = 0.05
 
 # --- CONSTANTS ---
@@ -690,8 +691,8 @@ func _setup_grid() -> void:
 	grid_material.shader = grid_shader
 
 	# Set uniforms from the exported script variables
-	grid_material.set_shader_parameter("grid_color", grid_color)
-	grid_material.set_shader_parameter("grid_spacing", 1.0) 
+	grid_material.set_shader_parameter("major_color", major_grid_color)
+	grid_material.set_shader_parameter("minor_color", minor_grid_color)
 	grid_material.set_shader_parameter("line_width", grid_line_width)
 
 	grid_mesh_instance.material_override = grid_material
@@ -930,18 +931,33 @@ func _process(delta: float) -> void:
 	if show_grid and is_instance_valid(grid_mesh_instance):
 		var grid_material := grid_mesh_instance.get_material_override() as ShaderMaterial
 		if grid_material:
-			# Get camera distance. Using the orbit camera's distance
-			# from its pivot point is a great proxy for zoom level.
 			var camera_dist := _camera_distance
 			
-			# Determine and set spacing based on LOD tiers.
-			var new_spacing := 0.1 # Default to the smallest spacing.
-			for tier in LOD_TIERS:
-				if camera_dist > tier.threshold:
-					new_spacing = tier.spacing
+			# Determine major and minor spacing based on LOD tiers.
+			var tier_idx := LOD_TIERS.size() - 1
+			for i in range(LOD_TIERS.size()):
+				if camera_dist > LOD_TIERS[i].threshold:
+					tier_idx = i
 					break
 			
-			grid_material.set_shader_parameter("grid_spacing", new_spacing)
+			var major_spacing = LOD_TIERS[tier_idx].spacing
+			var minor_spacing = LOD_TIERS[tier_idx + 1].spacing if tier_idx + 1 < LOD_TIERS.size() else major_spacing / 10.0
+			
+			# Calculate fade factor for smooth transitions.
+			var fade_factor := 1.0
+			var lower_threshold = LOD_TIERS[tier_idx].threshold
+			var upper_threshold = LOD_TIERS[tier_idx - 1].threshold if tier_idx > 0 else lower_threshold * 10.0
+			
+			if upper_threshold > lower_threshold:
+				# Calculate a 0-1 value based on how far the camera is between the two thresholds.
+				# This creates a smooth fade-in for the minor grid lines as the camera zooms in.
+				fade_factor = smoothstep(upper_threshold, lower_threshold, camera_dist)
+			
+			# Update all shader uniforms
+			grid_material.set_shader_parameter("major_grid_spacing", major_spacing)
+			grid_material.set_shader_parameter("minor_grid_spacing", minor_spacing)
+			grid_material.set_shader_parameter("fade_factor", fade_factor)
+
 
 	_update_dynamic_view_elements()
 	_update_camera_transform()
