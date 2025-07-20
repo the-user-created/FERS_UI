@@ -16,14 +16,15 @@ extends SubViewportContainer
 @export_category("Grid")
 @export var show_grid: bool = true
 @export var major_grid_color: Color = Color(0.5, 0.5, 0.5, 1.0)
-@export var minor_grid_color: Color = Color(0.5, 0.5, 0.5, 0.5)
+@export var minor_grid_color: Color = Color(0.5, 0.5, 0.5, 0.25)
 @export var grid_line_width: float = 0.05
 
 # --- CONSTANTS ---
 const LOD_TIERS = [
-	{"threshold": 1000.0, "spacing": 100.0},
-	{"threshold": 100.0, "spacing": 10.0},
-	{"threshold": 10.0, "spacing": 1.0},
+	{"threshold": 1000.0, "spacing": 1000.0},
+	{"threshold": 100.0, "spacing": 100.0},
+	{"threshold": 10.0, "spacing": 10.0},
+	{"threshold": 1.0, "spacing": 1.0},
 	{"threshold": 0.0, "spacing": 0.1}
 ]
 
