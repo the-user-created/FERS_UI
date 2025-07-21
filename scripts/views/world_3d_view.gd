@@ -9,6 +9,11 @@ extends SubViewportContainer
 @export var keyboard_pan_speed: float = 5.0 # m/s
 @export var keyboard_orbit_speed: float = 1.5 # rad/s
 @export var zoom_speed: float = 1.1
+@export_category("Clipping")
+@export var min_near_clip: float = 0.1
+@export var min_far_clip: float = 1000.0
+@export var far_to_altitude_ratio: float = 100.0
+@export var near_to_far_ratio: float = 0.001
 @export_category("Display")
 @export var label_scale_factor: float = 0.0005 # Controls how large labels appear from a distance
 @export var boresight_lod_distance: float = 150.0 # Distance to switch from cone to line
@@ -904,6 +909,19 @@ func _process(delta: float) -> void:
 		if orbit_input != Vector2.ZERO:
 			_camera_yaw += orbit_input.x * keyboard_orbit_speed * delta
 			_camera_pitch = clamp(_camera_pitch + orbit_input.y * keyboard_orbit_speed * delta, -PI / 2.0 + 0.01, PI / 2.0 - 0.01)
+
+	# --- Dynamic Clipping Plane Calculation ---
+	if is_instance_valid(camera):
+		# Calculate Camera Altitude (using distance from focal point)
+		var altitude: float = max(1.0, _camera_distance)
+		
+		# Define a Dynamic Clipping Formula
+		var new_far_plane: float = max(min_far_clip, altitude * far_to_altitude_ratio)
+		var new_near_plane: float = max(min_near_clip, new_far_plane * near_to_far_ratio)
+		
+		# Update the Camera's near and far properties
+		camera.near = new_near_plane
+		camera.far = new_far_plane
 
 	# --- Adaptive Grid Logic ---
 	if show_grid and is_instance_valid(grid_mesh_instance):
