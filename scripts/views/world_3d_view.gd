@@ -119,6 +119,7 @@ func add_platform_visualization(platform_data: Dictionary) -> void:
 	# Use an Area3D as the root for picking via mouse input.
 	var platform_3d_vis_root = Area3D.new()
 	platform_3d_vis_root.name = element_id
+	platform_3d_vis_root.add_to_group("platforms")
 	platform_3d_vis_root.input_ray_pickable = true
 	platform_3d_vis_root.input_event.connect(_on_platform_input_event.bind(element_id))
 
@@ -273,54 +274,57 @@ func remove_platform_visualization(element_id: String) -> void:
 
 
 func _update_all_platform_positions(time: float) -> void:
-	for child in world_3d_root.get_children():
-		if child.name.begins_with("platform_") and child is Area3D:
-			var element_id: String = child.name
-			var platform_data: Dictionary = SimData.get_element_data(element_id)
-			if platform_data.is_empty(): continue
+	for child in get_tree().get_nodes_in_group("platforms"):
+		var platform_3d_node = child as Area3D
+		if not is_instance_valid(platform_3d_node): continue
+		var element_id: String = platform_3d_node.name
+		var platform_data: Dictionary = SimData.get_element_data(element_id)
+		if platform_data.is_empty(): continue
 
-			var motion_path_data: Dictionary = platform_data.get("motion_path", {})
-			var waypoints: Array = motion_path_data.get("waypoints", [])
-			var interp_type: String = motion_path_data.get("interpolation", "static")
+		var motion_path_data: Dictionary = platform_data.get("motion_path", {})
+		var waypoints: Array = motion_path_data.get("waypoints", [])
+		var interp_type: String = motion_path_data.get("interpolation", "static")
 
-			if waypoints.is_empty():
-				child.position = Vector3.ZERO
-				continue
+		if waypoints.is_empty():
+			platform_3d_node.position = Vector3.ZERO
+			continue
 
-			var new_pos := Vector3.ZERO
-			match interp_type:
-				"static": new_pos = _get_pos_from_waypoint(waypoints[0])
-				"linear": new_pos = _get_position_linear(time, waypoints)
-				"cubic":
-					var dd := _get_or_calculate_cubic_dd(element_id, waypoints)
-					if not dd.is_empty():
-						new_pos = _get_position_cubic(time, waypoints, dd) # Fallback to linear is handled inside 
-			child.position = new_pos
+		var new_pos := Vector3.ZERO
+		match interp_type:
+			"static": new_pos = _get_pos_from_waypoint(waypoints[0])
+			"linear": new_pos = _get_position_linear(time, waypoints)
+			"cubic":
+				var dd := _get_or_calculate_cubic_dd(element_id, waypoints)
+				if not dd.is_empty():
+					new_pos = _get_position_cubic(time, waypoints, dd)
+		platform_3d_node.position = new_pos
 
-			var location_label: Label3D = child.get_node_or_null("LocationLabel")
-			if location_label:
-				# Display position in FERS coordinates (X, Y-Plane, Altitude) which map to Godot's (X, Z, Y)
-				location_label.text = "Pos: (%.1f, %.1f, %.1f)" % [new_pos.x, new_pos.z, new_pos.y]
+		var location_label: Label3D = platform_3d_node.get_node_or_null("LocationLabel")
+		if location_label:
+			# Display position in FERS coordinates (X, Y-Plane, Altitude) which map to Godot's (X, Z, Y)
+			location_label.text = "Pos: (%.1f, %.1f, %.1f)" % [new_pos.x, new_pos.z, new_pos.y]
 
 
 func _update_all_platform_orientations(time: float) -> void:
-	for child in world_3d_root.get_children():
-		if child.name.begins_with("platform_") and child is Area3D:
-			var element_id: String = child.name
-			var platform_data: Dictionary = SimData.get_element_data(element_id)
-			if platform_data.is_empty(): continue
-
-			var is_sensor = platform_data.get("platform_type_actual") in ["monostatic", "transmitter", "receiver"]
-			var visuals_node := child.get_node_or_null("BoresightVisuals") as Node3D
-			if visuals_node:
-				visuals_node.visible = is_sensor
+	for child in get_tree().get_nodes_in_group("platforms"):
+		var platform_3d_node = child as Area3D
+		if not is_instance_valid(platform_3d_node): continue
 			
-			if not is_sensor:
-				child.basis = Basis.IDENTITY
-				continue
+		var element_id: String = platform_3d_node.name
+		var platform_data: Dictionary = SimData.get_element_data(element_id)
+		if platform_data.is_empty(): continue
 
-			var rotation_model = platform_data.get("rotation_model", {})
-			child.basis = _get_current_rotation(time, rotation_model, element_id)
+		var is_sensor = platform_data.get("platform_type_actual") in ["monostatic", "transmitter", "receiver"]
+		var visuals_node := platform_3d_node.get_node_or_null("BoresightVisuals") as Node3D
+		if visuals_node:
+			visuals_node.visible = is_sensor
+		
+		if not is_sensor:
+			platform_3d_node.basis = Basis.IDENTITY
+			continue
+
+		var rotation_model = platform_data.get("rotation_model", {})
+		platform_3d_node.basis = _get_current_rotation(time, rotation_model, element_id)
 
 
 func _on_platform_input_event(_camera: Camera3D, event: InputEvent, _pos: Vector3, _normal: Vector3, _shape_idx: int, element_id: String):
@@ -332,46 +336,46 @@ func _on_platform_input_event(_camera: Camera3D, event: InputEvent, _pos: Vector
 # --- Boresight and LOD functions ---
 func _update_dynamic_view_elements() -> void:
 	var new_pixel_size = _camera_distance * label_scale_factor
+	
+	for node in get_tree().get_nodes_in_group("platforms"):
+		var platform_node = node as Area3D
+		if not is_instance_valid(platform_node): continue
 
-	for node in world_3d_root.get_children():
-		# Process platform nodes
-		if node is Area3D and node.name.begins_with("platform_"):
-			# --- Adaptive Scaling for Visibility at Distance ---
-			# This ensures the physical representations (sphere, boresight) remain
-			# visible when zoomed out, while respecting their base parameters.
-			# The scale is 1.0 when close and grows linearly with camera distance past the LOD threshold.
-			var adaptive_scale = max(1.0, _camera_distance / boresight_lod_distance)
+		# --- Adaptive Scaling for Visibility at Distance ---
+		var adaptive_scale = max(1.0, _camera_distance / boresight_lod_distance)
+		
+		var sphere := platform_node.get_node_or_null("Sphere") as CSGSphere3D
+		if sphere:
+			sphere.scale = Vector3.ONE * adaptive_scale
 
-			var sphere := node.get_node_or_null("Sphere") as CSGSphere3D
-			if sphere:
-				sphere.scale = Vector3.ONE * adaptive_scale
+		var collision_shape := platform_node.get_node_or_null("CollisionShape") as CollisionShape3D
+		if collision_shape:
+			collision_shape.scale = Vector3.ONE * adaptive_scale
 
-			var collision_shape := node.get_node_or_null("CollisionShape") as CollisionShape3D
-			if collision_shape:
-				collision_shape.scale = Vector3.ONE * adaptive_scale
+		# --- Boresight Scaling ---
+		var visuals := platform_node.get_node_or_null("BoresightVisuals")
+		if visuals and visuals.visible:
+			visuals.scale = Vector3.ONE * adaptive_scale
+			var cone := visuals.get_node_or_null("BoresightCone") as MeshInstance3D
+			if cone:
+				cone.visible = true # Always show the cone
 
-			# --- Boresight Scaling ---
-			var visuals := node.get_node_or_null("BoresightVisuals")
-			if visuals and visuals.visible:
-				visuals.scale = Vector3.ONE * adaptive_scale
-				var cone := visuals.get_node_or_null("BoresightCone") as MeshInstance3D
-				if cone:
-					cone.visible = true # Always show the cone
+		# --- Adaptive Label Sizing (unaffected by transform scale) ---
+		var label: Label3D = platform_node.get_node_or_null("NameLabel")
+		if label:
+			label.pixel_size = new_pixel_size
+		var location_label: Label3D = platform_node.get_node_or_null("LocationLabel")
+		if location_label:
+			location_label.pixel_size = new_pixel_size * (48.0 / 64.0)
 
-			# --- Adaptive Label Sizing (unaffected by transform scale) ---
-			var label: Label3D = node.get_node_or_null("NameLabel")
-			if label:
-				label.pixel_size = new_pixel_size
-			var location_label: Label3D = node.get_node_or_null("LocationLabel")
-			if location_label:
-				location_label.pixel_size = new_pixel_size * (48.0 / 64.0)
-					
-		# Process motion path nodes
-		elif node is Node3D and node.name.begins_with("MotionPath_"):
-			# Scale motion path waypoint labels
-			for path_child in node.get_children():
-				if path_child is Label3D:
-					path_child.pixel_size = new_pixel_size * (48.0 / 64.0)
+	for node in get_tree().get_nodes_in_group("motion_paths"):
+		var motion_path_node = node as Node3D
+		if not is_instance_valid(motion_path_node): continue
+		# Scale motion path waypoint labels
+		for path_child in motion_path_node.get_children():
+			if path_child is Label3D:
+				path_child.pixel_size = new_pixel_size * (48.0 / 64.0)
+
 
 func _get_beamwidth_from_antenna(antenna_data: Dictionary) -> float:
 	if antenna_data.is_empty():
@@ -450,6 +454,7 @@ func _update_motion_path_visualization(element_id: String, platform_data: Dictio
 	if not path_node:
 		path_node = Node3D.new()
 		path_node.name = path_node_name
+		path_node.add_to_group("motion_paths")
 		world_3d_root.add_child(path_node)
 	else:
 		for child in path_node.get_children():
@@ -633,27 +638,6 @@ func _finalize_cubic(waypoints: Array) -> Array[Vector3]:
 		dd[i] = dd[i] * dd[i+1] + tmp[i]
 
 	return dd
-	
-func _update_all_labels_scale() -> void:
-	var new_pixel_size = _camera_distance * label_scale_factor
-
-	for node in world_3d_root.get_children():
-		# Scale platform labels
-		if node is Area3D and node.name.begins_with("platform_"):
-			var label: Label3D = node.get_node_or_null("NameLabel")
-			if label:
-				label.pixel_size = new_pixel_size
-			var location_label: Label3D = node.get_node_or_null("LocationLabel")
-			if location_label:
-				# Location labels have smaller font size (48 vs 64)
-				location_label.pixel_size = new_pixel_size * (48.0 / 64.0)
-		# Scale motion path waypoint labels
-		elif node is Node3D and node.name.begins_with("MotionPath_"):
-			for path_child in node.get_children():
-				if path_child is Label3D:
-					# Waypoint labels have smaller font size (48 vs 64), so scale them proportionally
-					# to maintain their relative size difference.
-					path_child.pixel_size = new_pixel_size * (48.0 / 64.0)
 
 
 # --- Grid Drawing ---
@@ -959,13 +943,9 @@ func _process(delta: float) -> void:
 
 
 func frame_scene_contents() -> void:
-	var platform_nodes: Array[Area3D]
-	var path_nodes: Array[Node3D]
-	for child in world_3d_root.get_children():
-		if child.name.begins_with("platform_") and child is Area3D:
-			platform_nodes.append(child)
-		elif child.name.begins_with("MotionPath_") and child is Node3D:
-			path_nodes.append(child)
+	# Get nodes directly from groups, which is much more efficient than iterating all children.
+	var platform_nodes: Array = get_tree().get_nodes_in_group("platforms")
+	var path_nodes: Array = get_tree().get_nodes_in_group("motion_paths")
 
 	if platform_nodes.is_empty() and path_nodes.is_empty():
 		# Reset to a default view if nothing exists
@@ -979,13 +959,17 @@ func frame_scene_contents() -> void:
 	var has_content := false
 
 	for p_node in platform_nodes:
+		var platform_3d_node = p_node as Area3D
+		if not is_instance_valid(platform_3d_node): continue
 		if not has_content:
-			aabb = AABB(p_node.position, Vector3.ZERO)
+			aabb = AABB(platform_3d_node.position, Vector3.ZERO)
 			has_content = true
 		else:
-			aabb = aabb.expand(p_node.position)
+			aabb = aabb.expand(platform_3d_node.position)
 
-	for path_node in path_nodes:
+	for path_node_base in path_nodes:
+		var path_node = path_node_base as Node3D
+		if not is_instance_valid(path_node): continue
 		for path_child in path_node.get_children():
 			if path_child is MeshInstance3D:
 				var child_aabb = path_child.get_aabb()
