@@ -74,6 +74,14 @@ func _on_delete_button_pressed() -> void:
 	SimData.remove_element(current_element_id)
 
 
+func _on_numerical_text_committed(new_text: String, property_key: String) -> void:
+	# Don't emit an update if the input is incomplete (e.g., empty or just "-").
+	# The NumericLineEdit will revert to the last valid value on its own.
+	if new_text.is_empty() or new_text == "-":
+		return
+	_emit_property_change(property_key, new_text.to_float())
+
+
 # --- Data Communication ---
 ## Central function to notify the data store of a change.
 func _emit_property_change(property_key: String, new_value: Variant) -> void:
@@ -152,9 +160,9 @@ func _add_numerical_editor(label_text: String, property_key: String, current_val
 	num_edit.text = str(current_val)
 	num_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-	# When user presses Enter or focus is lost, convert to float and emit.
-	num_edit.text_submitted.connect(func(new_text): _emit_property_change(property_key, new_text.to_float()))
-	num_edit.focus_exited.connect(func(): _emit_property_change(property_key, num_edit.text.to_float()))
+	# Use bind() to connect to a single handler function, avoiding a new lambda each time.
+	num_edit.text_submitted.connect(_on_numerical_text_committed.bind(property_key))
+	num_edit.focus_exited.connect(func(): _on_numerical_text_committed(num_edit.text, property_key))
 
 	hbox.add_child(num_edit)
 	add_child(hbox)
