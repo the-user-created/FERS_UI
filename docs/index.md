@@ -15,3 +15,5 @@ these pages will guide you through the key concepts that make FERS-UI a robust a
 4. [3D Scene Visualization](04_3d_visualization.md)
 5. [XML Data Interchange](05_xml_data_interchange.md)
 6. [Extensibility and Future Development](06_extensibility_roadmap.md)
+7. **Advanced Topics**
+    * [Grid Rendering](advanced_topics/grid_rendering.md)
