@@ -30,6 +30,8 @@ unique_name_in_owner = true
 
 [node name="CartesianGrid" type="MeshInstance3D" parent="simulation_3d_viewport/world_3d_root"]
 
+[node name="GridLabels" type="Node3D" parent="simulation_3d_viewport/world_3d_root"]
+
 [node name="main_camera_3d" type="Camera3D" parent="simulation_3d_viewport/world_3d_root"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 10)
 near = 0.1

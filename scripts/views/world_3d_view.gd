@@ -24,10 +24,14 @@ extends SubViewportContainer
 @export var minor_grid_color: Color = Color(0.5, 0.5, 0.5, 0.25)
 @export var grid_line_width: float = 0.05
 
+@export_category("Grid Labels")
+@export var label_visible_radius: float = 2000.0
+
 # --- ONREADY VARIABLES ---
 @onready var world_3d_root: Node3D = %world_3d_root
 @onready var camera: Camera3D = %simulation_3d_viewport.get_node("world_3d_root/main_camera_3d")
 @onready var grid_mesh_instance: MeshInstance3D = %world_3d_root.get_node("CartesianGrid")
+@onready var grid_labels: Node3D = %world_3d_root.get_node("GridLabels")
 
 # --- CAMERA STATE ---
 var _target_position := Vector3.ZERO
@@ -40,6 +44,8 @@ var _is_panning: bool = false
 var _cubic_dd_cache: Dictionary = {}
 var _cubic_rot_dd_cache: Dictionary = {}
 # --- STATE ---
+var _last_major_grid_spacing: float = -1.0
+var _last_label_update_cam_pos: Vector3 = Vector3.INF
 var _has_focus: bool = false
 
 func _ready() -> void:
@@ -380,6 +386,10 @@ func _update_dynamic_view_elements() -> void:
 		for path_child in motion_path_node.get_children():
 			if path_child is Label3D:
 				path_child.pixel_size = new_pixel_size * (48.0 / 64.0)
+	
+	if grid_labels.visible:
+		for label in grid_labels.get_children():
+			(label as Label3D).pixel_size = new_pixel_size * (32.0 / 64.0)
 
 
 func _get_beamwidth_from_antenna(antenna_data: Dictionary) -> float:
@@ -650,6 +660,8 @@ func toggle_grid_visibility(should_show: bool) -> void:
 	show_grid = should_show
 	if is_instance_valid(grid_mesh_instance):
 		grid_mesh_instance.visible = show_grid
+	if is_instance_valid(grid_labels):
+		grid_labels.visible = should_show
 
 
 func _setup_grid() -> void:
@@ -955,6 +967,13 @@ func _process(delta: float) -> void:
 			grid_material.set_shader_parameter("minor_grid_spacing", minor_spacing)
 			grid_material.set_shader_parameter("fade_factor", fade_factor)
 
+			# --- LABEL UPDATE LOGIC ---
+			# Check if LOD changed or if camera panned more than one major grid line
+			var camera_pan_dist_sq := _target_position.distance_squared_to(_last_label_update_cam_pos)
+			if major_spacing != _last_major_grid_spacing or camera_pan_dist_sq > (major_spacing * major_spacing):
+				_update_grid_labels(major_spacing)
+				_last_major_grid_spacing = major_spacing
+				_last_label_update_cam_pos = _target_position
 
 	_update_dynamic_view_elements()
 	_update_camera_transform()
@@ -1044,3 +1063,57 @@ func focus_on_element(element_id: String) -> void:
 	var tween := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(self, "_target_position", platform_node.position, 0.5)
 	tween.parallel().tween_property(self, "_camera_distance", new_camera_distance, 0.5)
+
+# --- Grid Label Drawing ---
+func _update_grid_labels(major_spacing: float) -> void:
+	# Clear existing labels before regenerating
+	for child in grid_labels.get_children():
+		child.queue_free()
+
+	if not show_grid:
+		return
+		
+	# Prevent calculations with non-finite numbers which can happen at extreme zoom levels
+	if not is_finite(major_spacing) or major_spacing <= 0.0:
+		return
+
+	var view_center_xz := _target_position * Vector3(1, 0, 1)
+
+	# Determine loop range based on camera center and visible radius
+	var start_x: float = floor((view_center_xz.x - label_visible_radius) / major_spacing) * major_spacing
+	var end_x: float = ceil((view_center_xz.x + label_visible_radius) / major_spacing) * major_spacing
+	var start_z: float = floor((view_center_xz.z - label_visible_radius) / major_spacing) * major_spacing
+	var end_z: float = ceil((view_center_xz.z + label_visible_radius) / major_spacing) * major_spacing
+
+	# TODO: duplicated logic for the while loops and needs distance formatting
+	# Generate X-axis labels
+	var current_x: float = start_x
+	while current_x <= end_x:
+		# Avoid label at origin
+		if abs(current_x) > 0.001:
+			var label_text := str(current_x) + "m"
+			_create_grid_label(Vector3(current_x, 0, 0), label_text)
+		current_x += major_spacing
+
+	# Generate Z-axis labels
+	var current_z: float = start_z
+	while current_z <= end_z:
+		# Avoid label at origin
+		if abs(current_z) > 0.001:
+			var label_text := str(current_z) + "m"
+			_create_grid_label(Vector3(0, 0, current_z), label_text)
+		current_z += major_spacing
+
+
+func _create_grid_label(pos: Vector3, text: String) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.font_size = 48
+	label.outline_size = 4
+	label.outline_modulate = Color.BLACK
+	# Use the same color as the major grid lines for consistency
+	label.modulate = major_grid_color
+	# "Billboard" the label so it always faces the camera
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.position = pos
+	grid_labels.add_child(label)
