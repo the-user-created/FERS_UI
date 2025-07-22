@@ -26,6 +26,7 @@ extends SubViewportContainer
 
 @export_category("Grid Labels")
 @export var label_visible_radius: float = 2000.0
+@export var label_screen_padding: Vector2 = Vector2(8, 4) # Padding around labels for decluttering, in pixels (x, y)
 
 # --- ONREADY VARIABLES ---
 @onready var world_3d_root: Node3D = %world_3d_root
@@ -47,12 +48,22 @@ var _cubic_rot_dd_cache: Dictionary = {}
 var _last_major_grid_spacing: float = -1.0
 var _last_label_update_cam_pos: Vector3 = Vector3.INF
 var _has_focus: bool = false
+# --- FONT CACHING for label size estimation ---
+var _label_font: Font
+var _label_font_size: int
 
 func _ready() -> void:
 	stretch = true
 	focus_mode = Control.FOCUS_ALL
 	focus_entered.connect(func(): _has_focus = true)
 	focus_exited.connect(func(): _has_focus = false)
+	
+	# Cache font properties for performance.
+	var temp_label_for_font := Label.new()
+	_label_font = temp_label_for_font.get_theme_font("font")
+	# The font_size in Label3D is set to 48, so we use that for estimations.
+	_label_font_size = 48
+	temp_label_for_font.queue_free()
 
 	# Connect to the global data store to react to data changes.
 	SimData.simulation_time_updated.connect(_update_all_platform_positions)
@@ -1070,16 +1081,14 @@ func _update_grid_labels(major_spacing: float) -> void:
 	for child in grid_labels.get_children():
 		child.queue_free()
 
-	if not show_grid:
-		return
-		
-	# Prevent calculations with non-finite numbers which can happen at extreme zoom levels
-	if not is_finite(major_spacing) or major_spacing <= 0.0:
+	if not show_grid or not is_instance_valid(_label_font):
 		return
 
 	var view_center_xz := _target_position * Vector3(1, 0, 1)
+	var drawn_label_rects: Array[Rect2] = []
 
-	# Determine loop range based on camera center and visible radius
+	# --- 1. Gather all potential labels within the visible radius ---
+	var potential_labels: Array[Dictionary] = []
 	var start_x: float = floor((view_center_xz.x - label_visible_radius) / major_spacing) * major_spacing
 	var end_x: float = ceil((view_center_xz.x + label_visible_radius) / major_spacing) * major_spacing
 	var start_z: float = floor((view_center_xz.z - label_visible_radius) / major_spacing) * major_spacing
@@ -1089,20 +1098,30 @@ func _update_grid_labels(major_spacing: float) -> void:
 	# Generate X-axis labels
 	var current_x: float = start_x
 	while current_x <= end_x:
-		# Avoid label at origin
-		if abs(current_x) > 0.001:
+		if abs(current_x) > 0.001: # Avoid label at origin
+			var label_pos := Vector3(current_x, 0, 0)
 			var label_text := str(current_x) + "m"
-			_create_grid_label(Vector3(current_x, 0, 0), label_text)
+			potential_labels.append({"pos": label_pos, "text": label_text})
 		current_x += major_spacing
 
 	# Generate Z-axis labels
 	var current_z: float = start_z
 	while current_z <= end_z:
-		# Avoid label at origin
-		if abs(current_z) > 0.001:
+		if abs(current_z) > 0.001: # Avoid label at origin
+			var label_pos := Vector3(0, 0, current_z)
 			var label_text := str(current_z) + "m"
-			_create_grid_label(Vector3(0, 0, current_z), label_text)
+			potential_labels.append({"pos": label_pos, "text": label_text})
 		current_z += major_spacing
+
+	# --- 2. Sort by priority (closer to camera is higher priority) ---
+	potential_labels.sort_custom(func(a, b):
+		return a.pos.distance_squared_to(camera.global_position) < b.pos.distance_squared_to(camera.global_position)
+	)
+
+	# --- 3. Process sorted labels, checking for screen-space collisions ---
+	var current_pixel_size = (_camera_distance * label_scale_factor) * (32.0 / 64.0)
+	for label_data in potential_labels:
+		_try_place_label(label_data, current_pixel_size, drawn_label_rects)
 
 
 func _create_grid_label(pos: Vector3, text: String) -> void:
@@ -1117,3 +1136,30 @@ func _create_grid_label(pos: Vector3, text: String) -> void:
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.position = pos
 	grid_labels.add_child(label)
+
+
+func _try_place_label(label_data: Dictionary, current_pixel_size: float, drawn_rects: Array[Rect2]) -> bool:
+	var pos: Vector3 = label_data.pos
+	var text: String = label_data.text
+
+	# Don't bother processing labels that are behind the camera.
+	if camera.is_position_behind(pos):
+		return false
+
+	var screen_pos: Vector2 = camera.unproject_position(pos)
+
+	# Estimate the label's bounding box on the screen.
+	var text_size: Vector2 = _label_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, _label_font_size)
+	var estimated_screen_size: Vector2 = text_size * current_pixel_size
+
+	var label_rect = Rect2(screen_pos - estimated_screen_size / 2.0, estimated_screen_size)\
+		.grow_individual(label_screen_padding.x, label_screen_padding.y, label_screen_padding.x, label_screen_padding.y)
+
+	# Check for collisions with already drawn labels.
+	for existing_rect in drawn_rects:
+		if label_rect.intersects(existing_rect):
+			return false # Collision detected, do not place this label.
+
+	drawn_rects.append(label_rect)
+	_create_grid_label(pos, text)
+	return true
