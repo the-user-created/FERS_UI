@@ -1082,6 +1082,16 @@ func focus_on_element(element_id: String) -> void:
 	tween.parallel().tween_property(self, "_camera_distance", new_camera_distance, 0.5)
 
 # --- Grid Label Drawing ---
+func _format_distance_label(distance: float) -> String:
+	var abs_dist: float = abs(distance)
+	if abs_dist < 0.01:
+		return "0m"
+	
+	if abs_dist >= 1000.0:
+		return "%.1fkm" % (distance / 1000.0)
+	
+	return "%.0fm" % distance
+
 func _update_grid_labels(major_spacing: float) -> void:
 	# Clear existing labels before regenerating
 	for child in grid_labels.get_children():
@@ -1107,7 +1117,7 @@ func _update_grid_labels(major_spacing: float) -> void:
 		# Don't create a label at the origin, the axes lines handle that.
 		if abs(x) > 0.001:
 			var label_pos := Vector3(x, 0, 0)
-			var label_text := str(x) + "m"
+			var label_text := str(_format_distance_label(x))
 			_create_grid_label(label_pos, label_text)
 
 	# Generate Z-axis labels
@@ -1115,7 +1125,7 @@ func _update_grid_labels(major_spacing: float) -> void:
 		var z = center_grid_z + (i * major_spacing)
 		if abs(z) > 0.001:
 			var label_pos := Vector3(0, 0, z)
-			var label_text := str(z) + "m"
+			var label_text := str(_format_distance_label(z))
 			_create_grid_label(label_pos, label_text)
 
 
