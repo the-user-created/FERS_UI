@@ -15,7 +15,7 @@ extends SubViewportContainer
 @export var far_to_altitude_ratio: float = 100.0
 @export var near_to_far_ratio: float = 0.001
 @export_category("Display")
-@export var label_scale_factor: float = 0.0005 # Controls how large labels appear from a distance
+@export var perceptual_scale_factor: float = 0.04 # Controls perceptual size of labels.
 @export var boresight_lod_distance: float = 150.0 # Distance to switch from cone to line
 @export var boresight_length: float = 30.0 # Default length for boresight visuals
 @export_category("Grid")
@@ -23,10 +23,6 @@ extends SubViewportContainer
 @export var major_grid_color: Color = Color(0.5, 0.5, 0.5, 1.0)
 @export var minor_grid_color: Color = Color(0.5, 0.5, 0.5, 0.25)
 @export var grid_line_width: float = 0.05
-
-@export_category("Grid Labels")
-@export var label_visible_radius: float = 2000.0
-@export var label_screen_padding: Vector2 = Vector2(8, 4) # Padding around labels for decluttering, in pixels (x, y)
 
 # --- ONREADY VARIABLES ---
 @onready var world_3d_root: Node3D = %world_3d_root
@@ -57,7 +53,7 @@ func _ready() -> void:
 	focus_mode = Control.FOCUS_ALL
 	focus_entered.connect(func(): _has_focus = true)
 	focus_exited.connect(func(): _has_focus = false)
-	
+
 	# Cache font properties for performance.
 	var temp_label_for_font := Label.new()
 	_label_font = temp_label_for_font.get_theme_font("font")
@@ -126,7 +122,7 @@ func _on_simulation_data_property_preview_updated(element_id: String, property_k
 			var location_label := platform_node.get_node_or_null("LocationLabel") as Label3D
 			if location_label:
 				location_label.modulate = new_value
-			
+		
 			# Also update the boresight visuals for live color preview
 			_update_boresight_visuals.call_deferred(element_id, SimData.get_element_data(element_id))
 
@@ -183,7 +179,7 @@ func add_platform_visualization(platform_data: Dictionary) -> void:
 	location_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	location_label.position.y = -1.0 # Position it below the sphere
 	platform_3d_vis_root.add_child(location_label)
-	
+
 	# --- Boresight Visuals Container ---
 	var boresight_visuals = Node3D.new()
 	boresight_visuals.name = "BoresightVisuals"
@@ -229,9 +225,9 @@ func update_platform_visualization_properties(element_id: String, platform_data:
 				if rcs_value > 0.0:
 					# Calculate the physical radius of a conducting sphere for a given RCS (σ = πR²) -> R = sqrt(σ/π)
 					new_radius = sqrt(rcs_value / PI)
-			
+		
 			sphere.radius = max(0.1, new_radius) # Ensure a minimum visible size
-			
+		
 			var collision_shape := platform_node.get_node_or_null("CollisionShape") as CollisionShape3D
 			if collision_shape and collision_shape.shape is SphereShape3D:
 				(collision_shape.shape as SphereShape3D).radius = sphere.radius
@@ -243,7 +239,7 @@ func update_platform_visualization_properties(element_id: String, platform_data:
 			label.modulate = platform_color
 			# Position the label just above the sphere's new radius
 			label.position.y = sphere.radius + 0.5
-		
+	
 		var location_label := platform_node.get_node_or_null("LocationLabel") as Label3D
 		if location_label:
 			location_label.modulate = platform_color
@@ -251,7 +247,7 @@ func update_platform_visualization_properties(element_id: String, platform_data:
 
 		# Update motion path visualization
 		_update_motion_path_visualization(element_id, platform_data)
-		
+	
 		# Update position based on current time
 		var motion_path_data: Dictionary = platform_data.get("motion_path", {})
 		var waypoints: Array = motion_path_data.get("waypoints", [])
@@ -269,13 +265,13 @@ func update_platform_visualization_properties(element_id: String, platform_data:
 					if not dd.is_empty():
 						new_pos = _get_position_cubic(SimData.simulation_time, waypoints, dd)
 			platform_node.position = new_pos
-		
+	
 		if location_label:
 			# Display position in FERS coordinates (X, Y-Plane, Altitude) which map to Godot's (X, Z, Y)
 			location_label.text = "Pos: (%.1f, %.1f, %.1f)" % [platform_node.position.x, platform_node.position.z, platform_node.position.y]
 	else:
 		printerr("World3DView: Platform 3D node '", element_id, "' not found for update.")
-	
+
 	_update_boresight_visuals(element_id, platform_data)
 
 
@@ -331,7 +327,7 @@ func _update_all_platform_orientations(time: float) -> void:
 	for child in get_tree().get_nodes_in_group("platforms"):
 		var platform_3d_node = child as Area3D
 		if not is_instance_valid(platform_3d_node): continue
-			
+		
 		var element_id: String = platform_3d_node.name
 		var platform_data: Dictionary = SimData.get_element_data(element_id)
 		if platform_data.is_empty(): continue
@@ -340,7 +336,7 @@ func _update_all_platform_orientations(time: float) -> void:
 		var visuals_node := platform_3d_node.get_node_or_null("BoresightVisuals") as Node3D
 		if visuals_node:
 			visuals_node.visible = is_sensor
-		
+	
 		if not is_sensor:
 			platform_3d_node.basis = Basis.IDENTITY
 			continue
@@ -357,15 +353,14 @@ func _on_platform_input_event(_camera: Camera3D, event: InputEvent, _pos: Vector
 
 # --- Boresight and LOD functions ---
 func _update_dynamic_view_elements() -> void:
-	var new_pixel_size = _camera_distance * label_scale_factor
-	
+	var adaptive_scale = max(1.0, _camera_distance / boresight_lod_distance)
+	var cam_pos = camera.global_position
+
 	for node in get_tree().get_nodes_in_group("platforms"):
 		var platform_node = node as Area3D
 		if not is_instance_valid(platform_node): continue
 
 		# --- Adaptive Scaling for Visibility at Distance ---
-		var adaptive_scale = max(1.0, _camera_distance / boresight_lod_distance)
-		
 		var sphere := platform_node.get_node_or_null("Sphere") as CSGSphere3D
 		if sphere:
 			sphere.scale = Vector3.ONE * adaptive_scale
@@ -382,25 +377,35 @@ func _update_dynamic_view_elements() -> void:
 			if cone:
 				cone.visible = true # Always show the cone
 
-		# --- Adaptive Label Sizing (unaffected by transform scale) ---
-		var label: Label3D = platform_node.get_node_or_null("NameLabel")
-		if label:
-			label.pixel_size = new_pixel_size
+		# --- Per-label Sizing ---
+		var distance_to_cam = platform_node.global_position.distance_to(cam_pos)
+	
+		var name_label: Label3D = platform_node.get_node_or_null("NameLabel")
+		if name_label:
+			var world_height = distance_to_cam * perceptual_scale_factor
+			name_label.pixel_size = world_height / name_label.font_size
+	
 		var location_label: Label3D = platform_node.get_node_or_null("LocationLabel")
 		if location_label:
-			location_label.pixel_size = new_pixel_size * (48.0 / 64.0)
+			# Maintain relative size. Location label is smaller.
+			var world_height = (distance_to_cam * perceptual_scale_factor) * (48.0 / 64.0)
+			location_label.pixel_size = world_height / location_label.font_size
 
 	for node in get_tree().get_nodes_in_group("motion_paths"):
 		var motion_path_node = node as Node3D
-		if not is_instance_valid(motion_path_node): continue
-		# Scale motion path waypoint labels
 		for path_child in motion_path_node.get_children():
 			if path_child is Label3D:
-				path_child.pixel_size = new_pixel_size * (48.0 / 64.0)
-	
+				var distance_to_cam = path_child.global_position.distance_to(cam_pos)
+				var world_height = (distance_to_cam * perceptual_scale_factor) * (48.0 / 64.0)
+				path_child.pixel_size = world_height / path_child.font_size
+
 	if grid_labels.visible:
 		for label in grid_labels.get_children():
-			(label as Label3D).pixel_size = new_pixel_size * (32.0 / 64.0)
+			var label_3d = label as Label3D
+			var distance_to_cam = label_3d.global_position.distance_to(cam_pos)
+			# Grid labels are smaller.
+			var world_height = (distance_to_cam * perceptual_scale_factor) * (32.0 / 64.0)
+			label_3d.pixel_size = world_height / label_3d.font_size
 
 
 func _get_beamwidth_from_antenna(antenna_data: Dictionary) -> float:
@@ -426,7 +431,7 @@ func _get_beamwidth_from_antenna(antenna_data: Dictionary) -> float:
 func _update_boresight_visuals(element_id: String, platform_data: Dictionary) -> void:
 	var platform_node: Area3D = world_3d_root.get_node_or_null(element_id) as Area3D
 	if not platform_node: return
-	
+
 	var visuals_node := platform_node.get_node_or_null("BoresightVisuals") as Node3D
 	if not visuals_node: return
 
@@ -439,7 +444,7 @@ func _update_boresight_visuals(element_id: String, platform_data: Dictionary) ->
 	var antenna_id_ref_key = "%s_antenna_id_ref" % platform_type
 	var antenna_id = platform_data.get(antenna_id_ref_key, "")
 	var antenna_data = SimData.get_element_data(antenna_id)
-	
+
 	var beam_color = platform_data.get("color", Color.WHITE)
 
 	# --- Update Cone ---
@@ -447,16 +452,16 @@ func _update_boresight_visuals(element_id: String, platform_data: Dictionary) ->
 	if cone:
 		var beam_angle_deg = _get_beamwidth_from_antenna(antenna_data)
 		var cone_radius = boresight_length * tan(deg_to_rad(beam_angle_deg / 2.0))
-		
+	
 		var cone_mesh := cone.mesh as CylinderMesh
 		cone_mesh.height = boresight_length
 		cone_mesh.bottom_radius = cone_radius
-		
+	
 		# CylinderMesh origin is its center. We want the base (top) to be at the platform center.
 		# By default, cone points up (+Y). We rotate it to point forward (+Z).
 		cone.rotation.x = deg_to_rad(-90)
 		cone.position.z = boresight_length / 2.0
-		
+	
 		var cone_mat := cone.get_active_material(0) as StandardMaterial3D
 		cone_mat.albedo_color = beam_color * Color(1,1,1,0.2) # Apply transparency
 
@@ -718,7 +723,7 @@ func _get_current_rotation(time: float, rotation_data: Dictionary, element_id: S
 		var path_data = rotation_data.get("rotation_path_data", {})
 		var waypoints = path_data.get("waypoints", [])
 		var interp = path_data.get("interpolation", "static")
-		
+	
 		if not waypoints.is_empty():
 			var rot_vec2: Vector2
 			match interp:
@@ -734,7 +739,7 @@ func _get_current_rotation(time: float, rotation_data: Dictionary, element_id: S
 						rot_vec2 = _get_rotation_linear(time, waypoints)
 			az = deg_to_rad(rot_vec2.x)
 			el = deg_to_rad(rot_vec2.y)
-	
+
 	# Create basis from YXZ Euler angles (Yaw, Pitch, Roll)
 	# FERS Azimuth -> Yaw (Y-axis rotation)
 	# FERS Elevation -> Pitch (local X-axis rotation)
@@ -937,11 +942,11 @@ func _process(delta: float) -> void:
 	if is_instance_valid(camera):
 		# Calculate Camera Altitude (using distance from focal point)
 		var altitude: float = max(1.0, _camera_distance)
-		
+	
 		# Define a Dynamic Clipping Formula
 		var new_far_plane: float = max(min_far_clip, altitude * far_to_altitude_ratio)
 		var new_near_plane: float = max(min_near_clip, new_far_plane * near_to_far_ratio)
-		
+	
 		# Update the Camera's near and far properties
 		camera.near = new_near_plane
 		camera.far = new_far_plane
@@ -951,28 +956,28 @@ func _process(delta: float) -> void:
 		var grid_material := grid_mesh_instance.get_material_override() as ShaderMaterial
 		if grid_material:
 			var camera_dist: float = _camera_distance
-			
+		
 			# Calculate the current LOD level based on a logarithmic scale of the camera distance.
 			# Using log() for natural logarithm, and dividing by log(10.0) to get base-10 log.
 			var log_dist: float = log(camera_dist) / log(10.0) if camera_dist > 0.0 else 0.0
-			
+		
 			# The major grid lines are the primary reference, determined by the integer part of the log.
 			var major_spacing_exponent: float = floor(log_dist)
 			var major_spacing: float = pow(10.0, major_spacing_exponent)
-			
+		
 			# The minor grid lines are one level of detail finer.
 			var minor_spacing: float = major_spacing / 10.0
-			
+		
 			# Calculate fade factor for a smooth transition between LODs.
 			# The fractional part of the log tells us how far we are between two levels.
 			var lod_fraction: float = log_dist - floor(log_dist)
-			
+		
 			# We want minor lines to be fully visible when a new LOD level starts (fraction is low),
 			# and fully faded out just before the next level begins (fraction is high).
 			# The range (e.g., 0.5 to 0.9) determines when the fade starts and ends, giving a
 			# period where minor lines are solid before they begin to fade.
 			var fade_factor: float = 1.0 - smoothstep(0.5, 0.9, lod_fraction)
-			
+		
 			# Update all shader uniforms
 			grid_material.set_shader_parameter("major_grid_spacing", major_spacing)
 			grid_material.set_shader_parameter("minor_grid_spacing", minor_spacing)
@@ -980,11 +985,12 @@ func _process(delta: float) -> void:
 
 			# --- LABEL UPDATE LOGIC ---
 			# Check if LOD changed or if camera panned more than one major grid line
-			var camera_pan_dist_sq := _target_position.distance_squared_to(_last_label_update_cam_pos)
+			var current_cam_xz_pos = camera.global_position * Vector3(1, 0, 1)
+			var camera_pan_dist_sq := current_cam_xz_pos.distance_squared_to(_last_label_update_cam_pos)
 			if major_spacing != _last_major_grid_spacing or camera_pan_dist_sq > (major_spacing * major_spacing):
 				_update_grid_labels(major_spacing)
 				_last_major_grid_spacing = major_spacing
-				_last_label_update_cam_pos = _target_position
+				_last_label_update_cam_pos = current_cam_xz_pos
 
 	_update_dynamic_view_elements()
 	_update_camera_transform()
@@ -1081,47 +1087,36 @@ func _update_grid_labels(major_spacing: float) -> void:
 	for child in grid_labels.get_children():
 		child.queue_free()
 
-	if not show_grid or not is_instance_valid(_label_font):
+	if not show_grid or major_spacing <= 0.0:
 		return
 
-	var view_center_xz := _target_position * Vector3(1, 0, 1)
-	var drawn_label_rects: Array[Rect2] = []
+	# --- Dynamic Label Generation based on Camera Position and Major Grid Spacing ---
+	# Find the camera's position projected onto the grid (XZ plane)
+	var camera_focus_point := Vector2(camera.global_position.x, camera.global_position.z)
 
-	# --- 1. Gather all potential labels within the visible radius ---
-	var potential_labels: Array[Dictionary] = []
-	var start_x: float = floor((view_center_xz.x - label_visible_radius) / major_spacing) * major_spacing
-	var end_x: float = ceil((view_center_xz.x + label_visible_radius) / major_spacing) * major_spacing
-	var start_z: float = floor((view_center_xz.z - label_visible_radius) / major_spacing) * major_spacing
-	var end_z: float = ceil((view_center_xz.z + label_visible_radius) / major_spacing) * major_spacing
+	# Find the closest major grid line to the camera for both axes
+	var center_grid_x = round(camera_focus_point.x / major_spacing) * major_spacing
+	var center_grid_z = round(camera_focus_point.y / major_spacing) * major_spacing # Vector2.y is world Z
 
-	# TODO: duplicated logic for the while loops and needs distance formatting
+	# Define how many labels to draw in each direction from the center line
+	var labels_per_direction = 10
+
 	# Generate X-axis labels
-	var current_x: float = start_x
-	while current_x <= end_x:
-		if abs(current_x) > 0.001: # Avoid label at origin
-			var label_pos := Vector3(current_x, 0, 0)
-			var label_text := str(current_x) + "m"
-			potential_labels.append({"pos": label_pos, "text": label_text})
-		current_x += major_spacing
+	for i in range(-labels_per_direction, labels_per_direction + 1):
+		var x = center_grid_x + (i * major_spacing)
+		# Don't create a label at the origin, the axes lines handle that.
+		if abs(x) > 0.001:
+			var label_pos := Vector3(x, 0, 0)
+			var label_text := str(x) + "m"
+			_create_grid_label(label_pos, label_text)
 
 	# Generate Z-axis labels
-	var current_z: float = start_z
-	while current_z <= end_z:
-		if abs(current_z) > 0.001: # Avoid label at origin
-			var label_pos := Vector3(0, 0, current_z)
-			var label_text := str(current_z) + "m"
-			potential_labels.append({"pos": label_pos, "text": label_text})
-		current_z += major_spacing
-
-	# --- 2. Sort by priority (closer to camera is higher priority) ---
-	potential_labels.sort_custom(func(a, b):
-		return a.pos.distance_squared_to(camera.global_position) < b.pos.distance_squared_to(camera.global_position)
-	)
-
-	# --- 3. Process sorted labels, checking for screen-space collisions ---
-	var current_pixel_size = (_camera_distance * label_scale_factor) * (32.0 / 64.0)
-	for label_data in potential_labels:
-		_try_place_label(label_data, current_pixel_size, drawn_label_rects)
+	for i in range(-labels_per_direction, labels_per_direction + 1):
+		var z = center_grid_z + (i * major_spacing)
+		if abs(z) > 0.001:
+			var label_pos := Vector3(0, 0, z)
+			var label_text := str(z) + "m"
+			_create_grid_label(label_pos, label_text)
 
 
 func _create_grid_label(pos: Vector3, text: String) -> void:
@@ -1136,30 +1131,3 @@ func _create_grid_label(pos: Vector3, text: String) -> void:
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.position = pos
 	grid_labels.add_child(label)
-
-
-func _try_place_label(label_data: Dictionary, current_pixel_size: float, drawn_rects: Array[Rect2]) -> bool:
-	var pos: Vector3 = label_data.pos
-	var text: String = label_data.text
-
-	# Don't bother processing labels that are behind the camera.
-	if camera.is_position_behind(pos):
-		return false
-
-	var screen_pos: Vector2 = camera.unproject_position(pos)
-
-	# Estimate the label's bounding box on the screen.
-	var text_size: Vector2 = _label_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, _label_font_size)
-	var estimated_screen_size: Vector2 = text_size * current_pixel_size
-
-	var label_rect = Rect2(screen_pos - estimated_screen_size / 2.0, estimated_screen_size)\
-		.grow_individual(label_screen_padding.x, label_screen_padding.y, label_screen_padding.x, label_screen_padding.y)
-
-	# Check for collisions with already drawn labels.
-	for existing_rect in drawn_rects:
-		if label_rect.intersects(existing_rect):
-			return false # Collision detected, do not place this label.
-
-	drawn_rects.append(label_rect)
-	_create_grid_label(pos, text)
-	return true
